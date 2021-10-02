@@ -208,10 +208,12 @@ struct Player
         Sounds::player_dies(pos);
     }
 
+    static constexpr ivec2 hitbox_a = ivec2(-4, -5), hitbox_b = ivec2(3, 4);
+
     [[nodiscard]] bool SolidAtOffset(Map &map, ivec2 offset)
     {
-        for (int point_y : {-5, 4})
-        for (int point_x : {-4, 3})
+        for (int point_y : {hitbox_a.y, hitbox_b.y})
+        for (int point_x : {hitbox_a.x, hitbox_b.x})
         {
             ivec2 point = pos + offset + ivec2(point_x, point_y);
 
@@ -289,6 +291,7 @@ namespace States
             }
 
             sky.Move();
+            map.Tick();
             par.Tick();
             scene_switch.Tick();
 
@@ -309,14 +312,9 @@ namespace States
                         Sounds::player_jumps(p.pos);
                 };
 
-                { // Flame trail.
-                    if (p.death_timer == 0)
-                        par.AddPlayerFlame(p.pos + fvec2(frand.abs() <= 4, frand.abs() <= 4), p.vel * 0.4 + fvec2(frand.abs() < 0.1, -(0.1 < frand < 1)));
-                }
-
                 { // Controls.
                     { // Walking.
-                        int hc = con.right.down() - con.left.down();
+                        int hc = p.death_timer > 0 ? 0 : con.right.down() - con.left.down();
 
                         if (hc)
                         {
@@ -336,7 +334,7 @@ namespace States
                     }
 
                     { // Jumping.
-                        if (p.ground && con.jump.pressed())
+                        if (p.ground && p.death_timer == 0 && con.jump.pressed())
                         {
                             CreateJumpEffect(false);
                             p.vel.y = -p_jump_speed;
@@ -350,53 +348,89 @@ namespace States
                     }
                 }
 
+                { // Spreading corruption.
+                    if (p.death_timer == 0)
+                    {
+                        auto Corrupt = [&](ivec2 pixel_pos)
+                        {
+                            ivec2 tile_pos = div_ex(pixel_pos, tile_size);
+                            if (!map.cells.pos_in_range(tile_pos))
+                                return; // Tile coords out of range.
+
+                            Cell &cell = map.cells.safe_nonthrowing_at(tile_pos);
+                            if (cell.corruption_stage > 0)
+                                return; // Already corrupted.
+
+                            if (!GetTileInfo(cell.tile).corruptable)
+                                return; // Not corruptable.
+
+                            cell.corruption_stage = Cell::num_corruption_stages;
+                            cell.corruption_time = map.Time();
+                        };
+
+                        for (int point_y : {p.hitbox_a.y-1, p.hitbox_b.y+1})
+                        for (int point_x : {p.hitbox_a.x-1, p.hitbox_b.x+1})
+                            Corrupt(p.pos + ivec2(point_x, point_y));
+
+                        #error Make the corruption spread somehow.
+                    }
+                }
+
                 { // Gravity.
                     p.vel.y += gravity;
                 }
 
                 { // Update position.
-                    fvec2 clamped_vel = p.vel;
-                    clamp_var(clamped_vel.y, -p_vel_limit_y_up, p_vel_limit_y_down);
-
-                    fvec2 eff_vel = clamped_vel + p.vel_lag;
-                    ivec2 int_vel = iround(eff_vel);
-                    p.vel_lag = eff_vel - int_vel;
-
-                    for (int i : {0, 1})
+                    if (p.death_timer == 0)
                     {
-                        if (abs(p.vel_lag[i]) > p_vel_lag_decr)
-                            p.vel_lag[i] -= sign(p.vel_lag[i]) * p_vel_lag_decr;
-                        else
-                            p.vel_lag[i] = 0;
-                    }
+                        fvec2 clamped_vel = p.vel;
+                        clamp_var(clamped_vel.y, -p_vel_limit_y_up, p_vel_limit_y_down);
 
-                    while (int_vel)
-                    {
+                        fvec2 eff_vel = clamped_vel + p.vel_lag;
+                        ivec2 int_vel = iround(eff_vel);
+                        p.vel_lag = eff_vel - int_vel;
+
                         for (int i : {0, 1})
                         {
-                            if (int_vel[i] == 0)
-                                continue;
-
-                            int s = sign(int_vel[i]);
-
-                            ivec2 offset{};
-                            offset[i] = s;
-
-                            if (!p.SolidAtOffset(map, offset))
-                            {
-                                p.pos[i] += s;
-                                int_vel[i] -= s;
-                            }
+                            if (abs(p.vel_lag[i]) > p_vel_lag_decr)
+                                p.vel_lag[i] -= sign(p.vel_lag[i]) * p_vel_lag_decr;
                             else
+                                p.vel_lag[i] = 0;
+                        }
+
+                        while (int_vel)
+                        {
+                            for (int i : {0, 1})
                             {
-                                int_vel[i] = 0;
-                                if (p.vel[i] * s > 0)
-                                    p.vel[i] = 0;
-                                if (p.vel_lag[i] * s > 0)
-                                    p.vel_lag[i] = 0;
+                                if (int_vel[i] == 0)
+                                    continue;
+
+                                int s = sign(int_vel[i]);
+
+                                ivec2 offset{};
+                                offset[i] = s;
+
+                                if (!p.SolidAtOffset(map, offset))
+                                {
+                                    p.pos[i] += s;
+                                    int_vel[i] -= s;
+                                }
+                                else
+                                {
+                                    int_vel[i] = 0;
+                                    if (p.vel[i] * s > 0)
+                                        p.vel[i] = 0;
+                                    if (p.vel_lag[i] * s > 0)
+                                        p.vel_lag[i] = 0;
+                                }
                             }
                         }
                     }
+                }
+
+                { // Flame trail.
+                    if (p.death_timer == 0)
+                        par.AddPlayerFlame(p.pos + fvec2(frand.abs() <= 4, frand.abs() <= 4), p.vel * 0.4 + fvec2(frand.abs() < 0.1, -(0.1 < frand < 1)));
                 }
 
                 { // Death conditions.
@@ -407,9 +441,6 @@ namespace States
                         if ((p.pos >= map.cells.size() * tile_size + margin).any() || p.pos.x < -margin)
                             p.Kill();
                     }
-
-                    if (mouse.left.pressed())
-                        p.Kill();
                 }
 
                 { // Death effects
@@ -455,6 +486,10 @@ namespace States
                 Graphics::Clear();
                 map.Render(camera_pos);
                 r.Finish();
+                Graphics::Blending::Func(Graphics::Blending::one, Graphics::Blending::one_minus_src_a, Graphics::Blending::zero, Graphics::Blending::one);
+                map.RenderCorruption(camera_pos);
+                r.Finish();
+                Graphics::Blending::FuncNormalPre();
 
                 // Render that texture to the main framebuffer, with outline.
                 adaptive_viewport.GetFrameBuffer().Bind();

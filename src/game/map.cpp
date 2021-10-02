@@ -2,11 +2,13 @@
 
 #include "game/main.h"
 
+constexpr int cor_stage_len = 15;
+
 static std::vector<TileInfo> tile_info_vec = []{
     std::vector<TileInfo> ret = {
-        {.tile = Tile::air , .solid = false, .vis = TileFlavors::Invis{}},
-        {.tile = Tile::wall, .solid = true , .vis = TileFlavors::Random{.index = 0, .count = 4}},
-        {.tile = Tile::dirt, .solid = true , .vis = TileFlavors::Merged{.index = 1}},
+        {.tile = Tile::air , .solid = false, .corruptable = false, .vis = TileFlavors::Invis{}},
+        {.tile = Tile::wall, .solid = true , .corruptable = false, .vis = TileFlavors::Random{.index = 0, .count = 4}},
+        {.tile = Tile::dirt, .solid = true , .corruptable = true , .vis = TileFlavors::Merged{.index = 1}},
     };
     if (ret.size() != std::size_t(Tile::_count))
         Program::Error("Internal error: The tile info vector size is different from the tile enum size.");
@@ -57,9 +59,14 @@ Map::Map(Stream::Input source)
     }
 }
 
+void Map::Tick()
+{
+    time++;
+}
+
 void Map::Render(ivec2 camera_pos) const
 {
-    static const Graphics::TextureAtlas::Region tiles_region = texture_atlas.Get("tiles.png");
+    static const Graphics::TextureAtlas::Region tiles_tex = texture_atlas.Get("tiles.png");
 
     ivec2 a = div_ex(camera_pos - screen_size/2, tile_size);
     ivec2 b = div_ex(camera_pos + screen_size/2, tile_size);
@@ -75,7 +82,7 @@ void Map::Render(ivec2 camera_pos) const
             [](const TileFlavors::Invis &) {},
             [&](const TileFlavors::Random &flavor)
             {
-                r.iquad(tile_pixel_pos, tiles_region.region(ivec2(cell.random % flavor.count, flavor.index) * tile_size, ivec2(tile_size)));
+                r.iquad(tile_pixel_pos, tiles_tex.region(ivec2(cell.random % flavor.count, flavor.index) * tile_size, ivec2(tile_size)));
             },
             [&](const TileFlavors::Merged &flavor)
             {
@@ -97,10 +104,31 @@ void Map::Render(ivec2 camera_pos) const
 
                     ivec2 pixel_sub_pos = sub_pos * tile_size / 2;
 
-                    r.iquad(tile_pixel_pos + pixel_sub_pos, tiles_region.region((ivec2(0, flavor.index) + variant) * tile_size + pixel_sub_pos, ivec2(tile_size / 2)));
+                    r.iquad(tile_pixel_pos + pixel_sub_pos, tiles_tex.region((ivec2(0, flavor.index) + variant) * tile_size + pixel_sub_pos, ivec2(tile_size / 2)));
                 }
             },
         }, tile_info.vis);
+    }
+}
+
+void Map::RenderCorruption(ivec2 camera_pos) const
+{
+    static const Graphics::TextureAtlas::Region corruption_tex = texture_atlas.Get("corruption.png");
+
+    ivec2 a = div_ex(camera_pos - screen_size/2, tile_size);
+    ivec2 b = div_ex(camera_pos + screen_size/2, tile_size);
+
+    for (ivec2 tile_pos : a <= vector_range <= b)
+    {
+        ivec2 tile_pixel_pos = tile_pos * tile_size - camera_pos;
+
+        const Cell &cell = cells.clamped_at(tile_pos);
+
+        if (cell.corruption_stage == 0)
+            continue; // Not corrupted.
+
+        int visual_stage = clamp_min(clamp_max((time - cell.corruption_time) / cor_stage_len, Cell::num_corruption_stages-1) - (Cell::num_corruption_stages - cell.corruption_stage));
+        r.iquad(tile_pixel_pos, corruption_tex.region(ivec2(visual_stage * tile_size, 0), ivec2(tile_size)));
     }
 }
 
