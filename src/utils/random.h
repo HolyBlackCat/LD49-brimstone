@@ -20,19 +20,19 @@ Suggested minimal setup:
     auto random_generator = Random::RandomDeviceSeedSeq().MakeRng<Random::DefaultGenerator>();
     Random::Scalar<int> irand(random_generator);
     Random::Scalar<float> frand(random_generator);
-    Random::Misc<float> miscrand(random_generator);
+    Random::Misc<float> mrand(random_generator);
 
 Usage:
     A <= {i,f}rand <= B // Types of bounds don't affect the resulting type.
     A <  {i,f}rand <  B // Bounds can even have different floating-point-ness compared to the target type.
     {i,f}rand <= A      // The default lower bound is 0, inclusive.
     {i,f}rand <  A      // ^
-    miscrand.boolean()  // true, false
-    miscrand.sign()     // 1, -1
-    miscrand.angle()    // -pi <= x < pi (the type is controlled by the template parameter of `Random::Misc`)
-    miscrand.index(N)   // 0 <= x < N (the type is always `std::ptrdiff_t`)
-    miscrand.choose({"foo", "bar"})
-    miscrand.choose(some_container) // The container must have random-access iterators. Plain arrays are supported.
+    mrand.boolean()     // true, false
+    mrand.sign()        // 1, -1
+    mrand.angle()       // -pi <= x < pi (the type is controlled by the template parameter of `Random::Misc`)
+    mrand.index(N)      // 0 <= x < N (the type is always `std::ptrdiff_t`)
+    mrand.choose({"foo", "bar"})
+    mrand.choose(some_container) // The container must have random-access iterators. Plain arrays are supported.
  */
 
 namespace Random
