@@ -7,6 +7,7 @@ namespace Sounds
     #define SOUNDS_LIST(X) \
         X( player_jumps, 0.3 ) \
         X( player_lands, 0.3 ) \
+        X( player_dies , 0.3 ) \
 
     #define SOUND_FUNC(name, rand)                                           \
         void name( std::optional<fvec2> pos, float vol = 1, float pitch = 0) \
@@ -24,32 +25,6 @@ namespace Sounds
     SOUNDS_LIST(SOUND_FUNC)
     #undef SOUND_FUNC
 }
-
-struct Player
-{
-    ivec2 pos{};
-    fvec2 vel{}, prev_vel{}, prev2_vel{};
-    fvec2 vel_lag{};
-    bool left = false;
-
-    bool ground = false, prev_ground = false;
-
-    int walk_timer = 0;
-
-    [[nodiscard]] bool SolidAtOffset(Map &map, ivec2 offset)
-    {
-        for (int point_y : {-5, 4})
-        for (int point_x : {-4, 3})
-        {
-            ivec2 point(point_x, point_y);
-
-            if (map.PixelIsSolid(pos + offset + point))
-                return true;
-        }
-
-        return false;
-    }
-};
 
 struct Controls
 {
@@ -152,6 +127,18 @@ class ParticleController
             drag = 0.01,
         ));
     }
+
+    void AddLongLivedPlayerFlame(fvec2 pos, fvec2 vel)
+    {
+        float c = frand <= 0.5;
+        Add(adjust(Particle{},
+            pos = pos, vel = vel,
+            color = fvec3(1, c, 0),
+            end_color = fvec3(1, c + 0.5, 0),
+            max_time = 60 <= irand <= 90,
+            drag = 0.01,
+        ));
+    }
 };
 
 class SceneSwitch
@@ -196,6 +183,43 @@ class SceneSwitch
     void EnterSceneAnimation()
     {
         timer = 1;
+    }
+};
+
+struct Player
+{
+    ivec2 pos{};
+    fvec2 vel{}, prev_vel{}, prev2_vel{};
+    fvec2 vel_lag{};
+    bool left = false;
+
+    bool ground = false, prev_ground = false;
+
+    int walk_timer = 0;
+
+    int death_timer = 0;
+
+    void Kill()
+    {
+        if (death_timer > 0)
+            return; // Already dead.
+
+        death_timer = 1;
+        Sounds::player_dies(pos);
+    }
+
+    [[nodiscard]] bool SolidAtOffset(Map &map, ivec2 offset)
+    {
+        for (int point_y : {-5, 4})
+        for (int point_x : {-4, 3})
+        {
+            ivec2 point = pos + offset + ivec2(point_x, point_y);
+
+            if (map.PixelIsSolid(point))
+                return true;
+        }
+
+        return false;
     }
 };
 
@@ -251,6 +275,9 @@ namespace States
                 p_min_y_vel_for_landing_effect = 1.5,
                 listener_dist = screen_size.x * 2.5;
 
+            constexpr int
+                p_death_anim_len = 20;
+
             { // Switch between levels (must be first).
                 if (auto next_level = scene_switch.ShouldSwitchToLevel())
                 {
@@ -265,9 +292,6 @@ namespace States
             par.Tick();
             scene_switch.Tick();
 
-            if (mouse.left.pressed())
-                scene_switch.QueueSwitchToLevel(1);
-
             { // Player.
                 p.prev2_vel = p.prev_vel;
                 p.prev_vel = p.vel;
@@ -280,13 +304,14 @@ namespace States
                     for (int i = 0; i < 10; i++)
                         par.AddSmallPlayerFlame(p.pos + fvec2(frand.abs() <= 3, 5), fvec2(frand.abs() <= 1, (-0.8 <= frand <= 0.16) * (landing ? -1 : 1)));
                     if (landing)
-                        Sounds::player_lands({});
+                        Sounds::player_lands(p.pos);
                     else
-                        Sounds::player_jumps({});
+                        Sounds::player_jumps(p.pos);
                 };
 
-                { // Flame trail
-                    par.AddPlayerFlame(p.pos + fvec2(frand.abs() <= 4, frand.abs() <= 4), p.vel * 0.4 + fvec2(frand.abs() < 0.1, -(0.1 < frand < 1)));
+                { // Flame trail.
+                    if (p.death_timer == 0)
+                        par.AddPlayerFlame(p.pos + fvec2(frand.abs() <= 4, frand.abs() <= 4), p.vel * 0.4 + fvec2(frand.abs() < 0.1, -(0.1 < frand < 1)));
                 }
 
                 { // Controls.
@@ -373,6 +398,35 @@ namespace States
                         }
                     }
                 }
+
+                { // Death conditions.
+                    { // Falling off from the map.
+                        constexpr int margin = tile_size / 2;
+
+                        // Check all borders except the top one.
+                        if ((p.pos >= map.cells.size() * tile_size + margin).any() || p.pos.x < -margin)
+                            p.Kill();
+                    }
+
+                    if (mouse.left.pressed())
+                        p.Kill();
+                }
+
+                { // Death effects
+                    if (p.death_timer)
+                        p.death_timer++;
+
+                    // Particles.
+                    if (p.death_timer > 0 && p.death_timer <= p_death_anim_len)
+                    {
+                        for (int i = 0; i < 10; i++)
+                            par.AddLongLivedPlayerFlame(p.pos + fvec2(frand.abs() <= 4, frand.abs() <= 4), fvec2::dir(mrand.angle(), frand <= mix(p.death_timer / float(p_death_anim_len), 2, 1)));
+                    }
+
+                    // Reload level.
+                    if (p.death_timer > 60)
+                        scene_switch.QueueSwitchToLevel(level_index);
+                }
             }
 
             { // Camera.
@@ -391,17 +445,40 @@ namespace States
             r.BindShader();
 
             sky.Render();
-            map.Render(camera_pos);
+
+            { // Render the map.
+                r.Finish();
+
+                // Render the map itself to a separate texture.
+                framebuffer_map.Bind();
+                Graphics::SetClearColor(fvec4(0));
+                Graphics::Clear();
+                map.Render(camera_pos);
+                r.Finish();
+
+                // Render that texture to the main framebuffer, with outline.
+                adaptive_viewport.GetFrameBuffer().Bind();
+                r.SetTexture(framebuffer_texture_map);
+                for (int i = 0; i < 4; i++)
+                    r.iquad(ivec2::dir4(i), screen_size).tex(ivec2(0)).color(fvec3(0)).mix(0).center().flip_y().alpha(0.3);
+                r.iquad(ivec2(0), screen_size).tex(ivec2(0)).center().flip_y();
+                r.Finish();
+
+                r.SetTexture(texture_main);
+            }
+
+
+            float p_alpha = clamp_min(1 - p.death_timer / 15.);
 
             { // Player (before particles).
                 int frame = p.walk_timer == 0 ? 0 : p.walk_timer / 5 % 2 + 1;
-                r.iquad(p.pos - camera_pos, atlas.player.region(ivec2(0, player_tex_size * frame), ivec2(player_tex_size))).center().flip_x(p.left).color(fvec3(1, frand <= 1, 0)).mix(0);
+                r.iquad(p.pos - camera_pos, atlas.player.region(ivec2(0, player_tex_size * frame), ivec2(player_tex_size))).center().flip_x(p.left).color(fvec3(1, frand <= 1, 0)).mix(0).alpha(p_alpha);
             }
 
             par.Render(camera_pos);
 
             { // Player (after particles).
-                r.iquad(p.pos - camera_pos + ivec2(p.left ? -1 : 0, 0), atlas.player.region(ivec2(player_tex_size, 0), ivec2(player_tex_size))).center();
+                r.iquad(p.pos - camera_pos + ivec2(p.left ? -1 : 0, 0), atlas.player.region(ivec2(player_tex_size, 0), ivec2(player_tex_size))).center().alpha(p_alpha);
             }
 
             scene_switch.Render();

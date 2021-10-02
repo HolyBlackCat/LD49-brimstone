@@ -1,6 +1,6 @@
 #include "main.h"
 
-const std::string_view window_name = "Omega";
+const std::string_view window_name = "LD49";
 
 Interface::Window window(std::string(window_name), screen_size * 2, Interface::windowed, adjust_(Interface::WindowSettings{}, min_size = screen_size));
 static Graphics::DummyVertexArray dummy_vao = nullptr;
@@ -36,6 +36,9 @@ Graphics::TextureAtlas texture_atlas = []{
 
 Graphics::Texture texture_main = Graphics::Texture(nullptr).Wrap(Graphics::clamp).Interpolation(Graphics::nearest).SetData(texture_atlas.GetImage());
 
+Graphics::Texture framebuffer_texture_map = Graphics::Texture(nullptr).Wrap(Graphics::clamp).Interpolation(Graphics::nearest).SetData(screen_size);
+Graphics::FrameBuffer framebuffer_map(framebuffer_texture_map);
+
 GameUtils::AdaptiveViewport adaptive_viewport(shader_config, screen_size);
 Render r = adjust_(Render(0x2000, shader_config), SetTexture(texture_main), SetMatrix(adaptive_viewport.GetDetails().MatrixCentered()));
 
@@ -44,7 +47,7 @@ Input::Mouse mouse;
 static auto random_generator = Random::RandomDeviceSeedSeq().MakeRng<Random::DefaultGenerator>();
 Random::Scalar<int> irand(random_generator);
 Random::Scalar<float> frand(random_generator);
-Random::Misc<float> miscrand(random_generator);
+Random::Misc<float> mrand(random_generator);
 
 struct ProgramState : Program::DefaultBasicState
 {

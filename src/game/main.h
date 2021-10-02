@@ -22,6 +22,9 @@ namespace Fonts
 extern Graphics::TextureAtlas texture_atlas;
 extern Graphics::Texture texture_main;
 
+extern Graphics::Texture framebuffer_texture_map;
+extern Graphics::FrameBuffer framebuffer_map;
+
 extern GameUtils::AdaptiveViewport adaptive_viewport;
 extern Render r;
 
@@ -34,4 +37,4 @@ STRUCT( GameState POLYMORPHIC EXTENDS GameUtils::State::Base )
 
 extern Random::Scalar<int> irand;
 extern Random::Scalar<float> frand;
-extern Random::Misc<float> miscrand;
+extern Random::Misc<float> mrand;
