@@ -6,6 +6,7 @@ static std::vector<TileInfo> tile_info_vec = []{
     std::vector<TileInfo> ret = {
         {.tile = Tile::air , .solid = false, .vis = TileFlavors::Invis{}},
         {.tile = Tile::wall, .solid = true , .vis = TileFlavors::Random{.index = 0, .count = 4}},
+        {.tile = Tile::dirt, .solid = true , .vis = TileFlavors::Merged{.index = 1}},
     };
     if (ret.size() != std::size_t(Tile::_count))
         Program::Error("Internal error: The tile info vector size is different from the tile enum size.");
@@ -18,6 +19,13 @@ static std::vector<TileInfo> tile_info_vec = []{
 
     return ret;
 }();
+
+bool TileFlavors::Merged::ShouldMergeWith(Tile a, Tile b)
+{
+    if (a == Tile::dirt && b == Tile::wall)
+        return true;
+    return a == b;
+}
 
 const TileInfo GetTileInfo(Tile tile)
 {
@@ -36,7 +44,7 @@ Map::Map(Stream::Input source)
 
     cells = decltype(cells)(layer_mid.size());
 
-    for (index_vec2 pos : index_vec2(0) <= vector_range < layer_mid.size())
+    for (auto pos : vector_range(layer_mid.size()))
     {
         Cell &cell = cells.safe_nonthrowing_at(pos);
 
@@ -68,6 +76,29 @@ void Map::Render(ivec2 camera_pos) const
             [&](const TileFlavors::Random &flavor)
             {
                 r.iquad(tile_pixel_pos, tiles_region.region(ivec2(cell.random % flavor.count, flavor.index) * tile_size, ivec2(tile_size)));
+            },
+            [&](const TileFlavors::Merged &flavor)
+            {
+                int rand_index = std::array{0,0,0,0,1,1,2,3}[cell.random % 8];
+
+                for (ivec2 sub_pos : vector_range(ivec2(2)))
+                {
+                    ivec2 offset = sub_pos * 2 - 1;
+                    bool merge_h = flavor.ShouldMergeWith(cell.tile, cells.clamped_at(tile_pos + offset with(y = 0)).tile);
+                    bool merge_v = flavor.ShouldMergeWith(cell.tile, cells.clamped_at(tile_pos + offset with(x = 0)).tile);
+                    bool merge_hv = merge_h && merge_v && flavor.ShouldMergeWith(cell.tile, cells.clamped_at(tile_pos + offset).tile);
+
+                    ivec2 variant;
+                    if      (merge_hv) variant = ivec2(rand_index, 0);
+                    else if (merge_h && merge_v) variant = ivec2(3, 1);
+                    else if (merge_h ) variant = ivec2(1, 1);
+                    else if (merge_v ) variant = ivec2(0, 1);
+                    else               variant = ivec2(2, 1);
+
+                    ivec2 pixel_sub_pos = sub_pos * tile_size / 2;
+
+                    r.iquad(tile_pixel_pos + pixel_sub_pos, tiles_region.region((ivec2(0, flavor.index) + variant) * tile_size + pixel_sub_pos, ivec2(tile_size / 2)));
+                }
             },
         }, tile_info.vis);
     }

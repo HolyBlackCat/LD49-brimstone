@@ -7,6 +7,7 @@ enum class Tile
 {
     air,
     wall,
+    dirt,
     _count,
 };
 
@@ -19,8 +20,15 @@ namespace TileFlavors
         int index = 0;
         int count = 0;
     };
+
+    struct Merged
+    {
+        int index = 0;
+
+        [[nodiscard]] static bool ShouldMergeWith(Tile a, Tile b);
+    };
 }
-using TileDrawMethod = std::variant<TileFlavors::Invis, TileFlavors::Random>;
+using TileDrawMethod = std::variant<TileFlavors::Invis, TileFlavors::Random, TileFlavors::Merged>;
 
 struct TileInfo
 {

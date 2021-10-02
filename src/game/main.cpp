@@ -6,7 +6,7 @@ Interface::Window window(std::string(window_name), screen_size * 2, Interface::w
 static Graphics::DummyVertexArray dummy_vao = nullptr;
 
 static Audio::Context audio_context = nullptr;
-static Audio::SourceManager audio_controller;
+Audio::SourceManager audio_controller;
 
 const Graphics::ShaderConfig shader_config = Graphics::ShaderConfig::Core();
 Interface::ImGuiController gui_controller(Poly::derived<Interface::ImGuiController::GraphicsBackend_Modern>, adjust_(Interface::ImGuiController::Config{}, shader_header = shader_config.common_header));
@@ -73,7 +73,7 @@ struct ProgramState : Program::DefaultBasicState
     void EndFrame() override
     {
         fps_counter.Update();
-        window.SetTitle(STR((window_name), " TPS:", (fps_counter.Tps()), " FPS:", (fps_counter.Fps())));
+        window.SetTitle(STR((window_name), " TPS:", (fps_counter.Tps()), " FPS:", (fps_counter.Fps()), " AUDIO:", (audio_controller.ActiveSources())));
 
         if (!state_manager)
             Program::Exit();
@@ -111,6 +111,9 @@ struct ProgramState : Program::DefaultBasicState
 
     void Init()
     {
+        // Load audio.
+        Audio::LoadMentionedFiles(Audio::LoadFromPrefixWithExt("assets/audio/"), Audio::mono, Audio::wav);
+
         ImGui::StyleColorsDark();
 
         // Load various small fonts

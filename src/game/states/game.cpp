@@ -2,6 +2,29 @@
 #include "game/map.h"
 #include "game/sky.h"
 
+namespace Sounds
+{
+    #define SOUNDS_LIST(X) \
+        X( player_jumps, 0.3 ) \
+        X( player_lands, 0.3 ) \
+
+    #define SOUND_FUNC(name, rand)                                           \
+        void name( std::optional<fvec2> pos, float vol = 1, float pitch = 0) \
+        {                                                                    \
+            auto src = audio_controller.Add(Audio::File<#name>());           \
+            if (pos)                                                         \
+                src->pos(*pos);                                              \
+            else                                                             \
+                src->relative();                                             \
+            src->volume(vol);                                                \
+            src->pitch(pow(2, pitch + (frand.abs() <= rand)));               \
+            src->play();                                                     \
+        }                                                                    \
+
+    SOUNDS_LIST(SOUND_FUNC)
+    #undef SOUND_FUNC
+}
+
 struct Player
 {
     ivec2 pos{};
@@ -10,6 +33,8 @@ struct Player
     bool left = false;
 
     bool ground = false, prev_ground = false;
+
+    int walk_timer = 0;
 
     [[nodiscard]] bool SolidAtOffset(Map &map, ivec2 offset)
     {
@@ -41,7 +66,7 @@ struct Particle
     float drag = 0;
     int max_time = 0;
     int time = 0;
-    int tex_index = 0;
+    int tex_index = 0; // If negative, treated as the custom size.
     fvec3 color;
     std::optional<fvec3> end_color;
 };
@@ -68,7 +93,9 @@ class ParticleController
 
     void Render(ivec2 camera_pos) const
     {
-        static const Graphics::TextureAtlas::Region tex = texture_atlas.Get("particles.png");
+        static const Graphics::TextureAtlas::Region
+            tex = texture_atlas.Get("particles.png"),
+            tex_custom_size = texture_atlas.Get("particle_large_circle.png");
 
         constexpr int pixel_size = 8;
         constexpr int tex_frames = 5;
@@ -77,12 +104,21 @@ class ParticleController
         {
             const Particle &par = list[i];
 
-            if (((par.pos - camera_pos).abs() > screen_size/2 + pixel_size/2).any())
+            bool has_custom_size = par.tex_index < 0;
+            float custom_size = !has_custom_size ? 0 : -par.tex_index * (1 - par.time / float(par.max_time));
+
+            if (((par.pos - camera_pos).abs() > screen_size/2 + (has_custom_size ? custom_size : pixel_size)/2).any())
                 continue; // Not visible.
 
             int frame = clamp(par.time * tex_frames / par.max_time, 0, tex_frames-1);
 
-            r.iquad(iround(par.pos) - camera_pos, tex.region(ivec2(frame, par.tex_index) * pixel_size, ivec2(pixel_size))).center().color(!par.end_color ? par.color : mix(par.time / float(par.max_time), par.color, *par.end_color)).mix(0);
+            auto quad = r.iquad(iround(par.pos) - camera_pos, !has_custom_size ? tex.region(ivec2(frame, par.tex_index) * pixel_size, ivec2(pixel_size)) : tex_custom_size)
+                .center()
+                .color(!par.end_color ? par.color : mix(par.time / float(par.max_time), par.color, *par.end_color))
+                .mix(0);
+
+            if (has_custom_size)
+                quad.scale(custom_size / tex_custom_size.size.x);
         }
     }
 
@@ -118,11 +154,58 @@ class ParticleController
     }
 };
 
+class SceneSwitch
+{
+    static constexpr float timer_step = 0.02;
+    float timer = 0;
+
+    std::optional<int> next_level;
+
+  public:
+    SceneSwitch() {}
+
+    void Tick()
+    {
+        clamp_var(timer += (next_level ? 1 : -1) * timer_step);
+    }
+
+    void Render() const
+    {
+        constexpr fvec3 color = fvec3(25, 13, 43) / 255;
+        float t = clamp(smoothstep(timer) * 1.1);
+        r.iquad(-screen_size/2, ivec2(screen_size.x, t * screen_size.y / 2)).color(color);
+        r.iquad(screen_size/2, -ivec2(screen_size.x, t * screen_size.y / 2)).color(color);
+    }
+
+    // Returns non-null after "exit scene" animation finishes playing.
+    [[nodiscard]] std::optional<int> ShouldSwitchToLevel() const
+    {
+        return next_level && timer >= 1 ? next_level : std::nullopt;
+    }
+
+    // Play "exit scene" animation.
+    void QueueSwitchToLevel(int level_index)
+    {
+        if (next_level)
+            return; // Already switching, refuse to change target.
+
+        next_level = level_index;
+    }
+
+    // Play "enter scene" animation.
+    void EnterSceneAnimation()
+    {
+        timer = 1;
+    }
+};
+
 namespace States
 {
     STRUCT( Game EXTENDS GameState )
     {
-        MEMBERS()
+        MEMBERS(
+            DECL(int INIT=1 ATTR Refl::Optional) level_index
+        )
 
         SIMPLE_STRUCT( Atlas
             DECL(Graphics::TextureAtlas::Region)
@@ -136,6 +219,7 @@ namespace States
         Player p;
         Controls con;
         ParticleController par;
+        SceneSwitch scene_switch;
 
         ivec2 camera_pos{};
 
@@ -143,7 +227,7 @@ namespace States
         void Init() override
         {
             texture_atlas.InitRegions(atlas, ".png");
-            map = Map("assets/maps/1.json");
+            map = Map(FMT("assets/maps/{}.json", level_index));
             camera_pos = map.cells.size() * tile_size / 2;
 
             p.pos = ivec2(map.points.GetSinglePoint("player") / tile_size) * tile_size + tile_size/2;
@@ -164,10 +248,25 @@ namespace States
                 p_vel_limit_y_up = 2.5,
                 p_vel_limit_y_down = 3.5,
                 p_vel_lag_decr = 0.05,
-                p_min_y_vel_for_landing_effect = 1.5;
+                p_min_y_vel_for_landing_effect = 1.5,
+                listener_dist = screen_size.x * 2.5;
+
+            { // Switch between levels (must be first).
+                if (auto next_level = scene_switch.ShouldSwitchToLevel())
+                {
+                    *this = Game();
+                    level_index = *next_level;
+                    Init();
+                    scene_switch.EnterSceneAnimation();
+                }
+            }
 
             sky.Move();
             par.Tick();
+            scene_switch.Tick();
+
+            if (mouse.left.pressed())
+                scene_switch.QueueSwitchToLevel(1);
 
             { // Player.
                 p.prev2_vel = p.prev_vel;
@@ -180,6 +279,10 @@ namespace States
                 {
                     for (int i = 0; i < 10; i++)
                         par.AddSmallPlayerFlame(p.pos + fvec2(frand.abs() <= 3, 5), fvec2(frand.abs() <= 1, (-0.8 <= frand <= 0.16) * (landing ? -1 : 1)));
+                    if (landing)
+                        Sounds::player_lands({});
+                    else
+                        Sounds::player_jumps({});
                 };
 
                 { // Flame trail
@@ -194,9 +297,11 @@ namespace States
                         {
                             clamp_var_abs(p.vel.x += p_walk_acc * hc, p_walk_speed);
                             p.left = hc < 0;
+                            p.walk_timer++;
                         }
                         else
                         {
+                            p.walk_timer = 0;
                             float dec = p.ground ? p_walk_dec : p_walk_dec_air;
                             if (abs(p.vel.x) <= dec)
                                 p.vel.x = 0;
@@ -269,13 +374,19 @@ namespace States
                     }
                 }
             }
+
+            { // Camera.
+                Audio::ListenerPosition(fvec2(camera_pos).to_vec3(-listener_dist));
+                Audio::ListenerOrientation(fvec3(0,0,1), fvec3(0,-1,0));
+                Audio::Source::DefaultRefDistance(listener_dist);
+            }
         }
 
         void Render() const override
         {
             constexpr int player_tex_size = 12;
 
-            Graphics::SetClearColor(fvec3(25, 13, 43) / 255);
+            Graphics::SetClearColor(fvec3(0));
             Graphics::Clear();
             r.BindShader();
 
@@ -283,7 +394,8 @@ namespace States
             map.Render(camera_pos);
 
             { // Player (before particles).
-                r.iquad(p.pos - camera_pos, atlas.player.region(ivec2(), ivec2(player_tex_size))).center().flip_x(p.left).color(fvec3(1, frand <= 1, 0)).mix(0);
+                int frame = p.walk_timer == 0 ? 0 : p.walk_timer / 5 % 2 + 1;
+                r.iquad(p.pos - camera_pos, atlas.player.region(ivec2(0, player_tex_size * frame), ivec2(player_tex_size))).center().flip_x(p.left).color(fvec3(1, frand <= 1, 0)).mix(0);
             }
 
             par.Render(camera_pos);
@@ -291,6 +403,8 @@ namespace States
             { // Player (after particles).
                 r.iquad(p.pos - camera_pos + ivec2(p.left ? -1 : 0, 0), atlas.player.region(ivec2(player_tex_size, 0), ivec2(player_tex_size))).center();
             }
+
+            scene_switch.Render();
 
             r.Finish();
         }
