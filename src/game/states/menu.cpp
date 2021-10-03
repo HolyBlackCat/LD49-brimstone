@@ -177,7 +177,7 @@ namespace States
                 r.itext(e.pos, e.text).color(fvec3(1)).alpha(text_alpha);
 
             // Author info.
-            r.itext(ivec2(0, screen_size.y/2), Graphics::Text(Fonts::main, "v" + version + ", Oct 2021, by HolyBlackCat for LD49")).color(fvec3(46,45,108)/255).alpha(1).align(ivec2(0,1));
+            r.itext(ivec2(0, screen_size.y/2), Graphics::Text(Fonts::main, "v" + version + ", Oct 2021, by HolyBlackCat for LD49")).color(fvec3(46,45,108)/255).alpha(text_alpha).align(ivec2(0,1));
 
             { // Vignette.
                 static const Graphics::TextureAtlas::Region vignette = texture_atlas.Get("vignette.png");
