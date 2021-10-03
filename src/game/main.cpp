@@ -9,7 +9,7 @@ static Audio::Context audio_context = nullptr;
 Audio::SourceManager audio_controller;
 
 const Graphics::ShaderConfig shader_config = Graphics::ShaderConfig::Core();
-Interface::ImGuiController gui_controller(Poly::derived<Interface::ImGuiController::GraphicsBackend_Modern>, adjust_(Interface::ImGuiController::Config{}, shader_header = shader_config.common_header, store_state_in_file = ""));
+// Interface::ImGuiController gui_controller(Poly::derived<Interface::ImGuiController::GraphicsBackend_Modern>, adjust_(Interface::ImGuiController::Config{}, shader_header = shader_config.common_header, store_state_in_file = ""));
 
 namespace Fonts
 {
@@ -98,15 +98,15 @@ struct ProgramState : Program::DefaultBasicState
 
     void Tick() override
     {
-        // window.ProcessEvents();
-        window.ProcessEvents({gui_controller.EventHook()});
+        window.ProcessEvents();
+        // window.ProcessEvents({gui_controller.EventHook()});
 
         if (window.ExitRequested())
             Program::Exit();
         if (window.Resized())
             Resize();
 
-        gui_controller.PreTick();
+        // gui_controller.PreTick();
         state_manager.Tick();
         audio_controller.Tick();
 
@@ -121,11 +121,11 @@ struct ProgramState : Program::DefaultBasicState
 
     void Render() override
     {
-        gui_controller.PreRender();
+        // gui_controller.PreRender();
         adaptive_viewport.BeginFrame();
         state_manager.Call(&GameState::Render);
         adaptive_viewport.FinishFrame();
-        gui_controller.PostRender();
+        // gui_controller.PostRender();
         Graphics::CheckErrors();
 
         window.SwapBuffers();
@@ -140,7 +140,7 @@ struct ProgramState : Program::DefaultBasicState
         // Load audio.
         Audio::LoadMentionedFiles(Audio::LoadFromPrefixWithExt("assets/audio/"), Audio::mono, Audio::wav);
 
-        ImGui::StyleColorsDark();
+        // ImGui::StyleColorsDark();
 
         Graphics::Blending::Enable();
         Graphics::Blending::FuncNormalPre();
