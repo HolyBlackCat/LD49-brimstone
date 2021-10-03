@@ -535,7 +535,8 @@ namespace States
                             Sounds::spike_lands(spike.pos);
                     }
 
-                    spike.vel += gravity;
+                    if (!spike.SolidAtOffset(map, ivec2()))
+                        spike.vel += gravity;
 
                     { // Update position.
                         float clamped_vel = spike.vel;

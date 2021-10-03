@@ -144,7 +144,7 @@ struct ProgramState : Program::DefaultBasicState
         Graphics::Blending::FuncNormalPre();
 
         state_manager.SetState("Menu{}");
-        // state_manager.SetState("Game{level_index=9}");
+        // state_manager.SetState("Game{level_index=10}");
     }
 };
 
