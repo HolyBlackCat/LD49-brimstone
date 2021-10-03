@@ -1,5 +1,6 @@
 #include "game/main.h"
 #include "game/particles.h"
+#include "game/progress.h"
 #include "game/sky.h"
 #include "game/sounds.h"
 
@@ -53,16 +54,44 @@ namespace States
 
         std::function<void(std::string &)> queued_func;
 
+        SavedProgress saved_progress;
+
         void Init() override
         {
-            entries.emplace_back(ivec2(0, 48), Graphics::Text(Fonts::main, "New game"), [&](std::string &next_state)
-            {
-                next_state = FMT("Game{{camera_starts_above=true,initial_sky_pos={}}}", sky.time);
-            });
-            entries.emplace_back(ivec2(0, 48 + 32), Graphics::Text(Fonts::main, "Quit"), [](std::string &next_state)
-            {
-                next_state = "0";
-            });
+            { // Load the saved progress.
+                try
+                {
+                    saved_progress = Refl::FromString<SavedProgress>(Stream::Input(SavedProgress::path));
+                }
+                catch (...) {}
+            }
+
+            { // Menu entries.
+                constexpr int
+                    button_spacing = 24;
+
+                int y = 48;
+
+                if (saved_progress.level > 1)
+                {
+                    entries.emplace_back(ivec2(0, y), Graphics::Text(Fonts::main, "Continue"), [&](std::string &next_state)
+                    {
+                        next_state = FMT("Game{{camera_starts_above=true,initial_sky_pos={},level_index={}}}", sky.time, saved_progress.level);
+                    });
+                    y += button_spacing;
+                }
+
+                entries.emplace_back(ivec2(0, y), Graphics::Text(Fonts::main, "New game"), [&](std::string &next_state)
+                {
+                    next_state = FMT("Game{{camera_starts_above=true,initial_sky_pos={}}}", sky.time);
+                });
+                y += button_spacing;
+                entries.emplace_back(ivec2(0, y), Graphics::Text(Fonts::main, "Quit"), [](std::string &next_state)
+                {
+                    next_state = "0";
+                });
+                y += button_spacing;
+            }
         }
 
         void Tick(std::string &next_state) override
@@ -91,7 +120,7 @@ namespace States
                 if (!queued_func && con.OkPressed())
                 {
                     queued_func = selected.func;
-                    Sounds::click({});
+                    Sounds::click_confirm({});
                 }
             }
 

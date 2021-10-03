@@ -70,14 +70,14 @@
                 {
                  "height":0,
                  "id":5,
-                 "name":"lamp",
+                 "name":"want_tutorial",
                  "point":true,
                  "rotation":0,
                  "type":"",
                  "visible":true,
                  "width":0,
-                 "x":42,
-                 "y":90
+                 "x":6,
+                 "y":6
                 }, 
                 {
                  "height":0,

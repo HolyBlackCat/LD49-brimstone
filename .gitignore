@@ -13,3 +13,5 @@ obj/**
 gmon.out
 compile_commands.json
 .cache/**
+
+bin/progres.txt

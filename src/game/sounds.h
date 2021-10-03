@@ -15,6 +15,7 @@ namespace Sounds
         X( gate_entered   , 0.2 ) \
         X( spike_lands    , 0.2 ) \
         X( click          , 0.2 ) \
+        X( click_confirm  , 0.2 ) \
 
     #define SOUND_FUNC(name, rand)                                           \
         inline void name( std::optional<fvec2> pos, float vol = 1, float pitch = 0) \

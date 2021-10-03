@@ -1,6 +1,7 @@
 #include "game/main.h"
 #include "game/map.h"
 #include "game/particles.h"
+#include "game/progress.h"
 #include "game/sky.h"
 #include "game/sounds.h"
 
@@ -193,6 +194,14 @@ namespace States
 
         float camera_movement_timer = 0; // Ticks towards zero.
 
+        struct TutMessage
+        {
+            std::string a, b;
+            std::function<bool()> should_hide;
+            int hide_timer = 0;
+        };
+        std::vector<TutMessage> tut_messages;
+
         [[nodiscard]] static std::string GetLevelFileName(int index)
         {
             return FMT("assets/maps/{}.json", index);
@@ -239,6 +248,15 @@ namespace States
 
                     it->second->push_back(&spike);
                     spike.same_x_spikes = it->second;
+                }
+            }
+
+            { // Tutorial.
+                if (map.points.GetSinglePointOpt("want_tutorial"))
+                {
+                    tut_messages.push_back({.a = "Arrows/WASD", .b = "move",                      .should_hide = [&]{return con.LeftDown() || con.RightDown();}});
+                    tut_messages.push_back({.a = "Z/Space/Up", .b = "jump (hold to jump higher)", .should_hide = [&]{return con.JumpDown() && p.vel.y > 0;}});
+                    tut_messages.push_back({.a = "R", .b = "restart level",                       .should_hide = [&]{return con.RestartPressed();}});
                 }
             }
 
@@ -299,10 +317,18 @@ namespace States
                         return;
                     }
 
+                    Stream::SaveFile(std::string(SavedProgress::path), Refl::ToString(SavedProgress{.level = *next_level}));
+
+                    std::vector<TutMessage> old_tut_messages;
+                    if (next_level == level_index)
+                        old_tut_messages = std::move(tut_messages);
+
                     *this = Game();
                     level_index = *next_level;
                     Init();
                     scene_switch.EnterSceneAnimation();
+
+                    tut_messages = std::move(old_tut_messages);
                 }
             }
 
@@ -739,6 +765,17 @@ namespace States
                     Audio::Source::DefaultRefDistance(listener_dist);
                 }
             }
+
+            { // Tutorial.
+                for (TutMessage &msg : tut_messages)
+                {
+                    if (msg.hide_timer > 0)
+                        msg.hide_timer++;
+
+                    if (msg.hide_timer == 0 && msg.should_hide())
+                        msg.hide_timer = 1;
+                }
+            }
         }
 
         void Render() const override
@@ -818,6 +855,24 @@ namespace States
 
             { // Vignette.
                 r.iquad(ivec2(0), atlas.vignette).center().alpha(0.5);
+            }
+
+            { // Tutorial.
+                for (int i : {0, 1, 2, 3, -1})
+                {
+                    int message_y = tut_messages.size();
+                    for (const TutMessage &msg : tut_messages)
+                    {
+                        ivec2 offset = i < 0 ? ivec2(0) : ivec2::dir4(i);
+                        fvec3 color = i < 0 ? fvec3(1) : fvec3(0);
+                        float alpha = smoothstep(clamp_min(1 - msg.hide_timer/60. * (i < 0 ? 1 : 4)));
+                        ivec2 pos = ivec2(0, screen_size.y/2 - message_y * 16) + (camera_target_pos - camera_pos) * 2;
+                        r.itext(pos with(x -= 10) + offset, Graphics::Text(Fonts::main, msg.a)).color(color).alpha(alpha).align(ivec2( 1, -1));
+                        r.itext(pos               + offset, Graphics::Text(Fonts::main, "-")).color(color).alpha(alpha).align(ivec2(0, -1));
+                        r.itext(pos with(x += 10) + offset, Graphics::Text(Fonts::main, msg.b)).color(color).alpha(alpha).align(ivec2(-1, -1));
+                        message_y--;
+                    }
+                }
             }
 
             // Scene transition.
