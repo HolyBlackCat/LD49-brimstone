@@ -131,9 +131,12 @@ void Map::Render(ivec2 camera_pos) const
 
     for (ivec2 tile_pos : a <= vector_range <= b)
     {
+        if (!cells.pos_in_range(tile_pos))
+            continue;
+
         ivec2 tile_pixel_pos = tile_pos * tile_size - camera_pos;
 
-        const Cell &cell = cells.clamped_at(tile_pos);
+        const Cell &cell = cells.unsafe_at(tile_pos);
         const TileInfo &tile_info = GetTileInfo(cell.tile);
 
         std::visit(Meta::overload{
@@ -193,9 +196,12 @@ void Map::RenderCorruption(ivec2 camera_pos) const
 
     for (ivec2 tile_pos : a <= vector_range <= b)
     {
+        if (!cells.pos_in_range(tile_pos))
+            continue;
+
         ivec2 tile_pixel_pos = tile_pos * tile_size - camera_pos;
 
-        const Cell &cell = cells.clamped_at(tile_pos);
+        const Cell &cell = cells.unsafe_at(tile_pos);
 
         if (cell.corruption_stage == 0)
             continue; // Not corrupted.

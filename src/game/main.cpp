@@ -114,6 +114,8 @@ struct ProgramState : Program::DefaultBasicState
 
     void Init()
     {
+        mouse.HideCursor();
+
         // Load audio.
         Audio::LoadMentionedFiles(Audio::LoadFromPrefixWithExt("assets/audio/"), Audio::mono, Audio::wav);
 
@@ -122,7 +124,8 @@ struct ProgramState : Program::DefaultBasicState
         Graphics::Blending::Enable();
         Graphics::Blending::FuncNormalPre();
 
-        state_manager.SetState("Game{}");
+        state_manager.SetState("Menu{}");
+        // state_manager.SetState("Game{}");
     }
 };
 

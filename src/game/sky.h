@@ -1,10 +1,9 @@
 #pragma once
 
-class Sky
+struct Sky
 {
     unsigned int time = 0;
 
-  public:
     Sky() {}
 
     void Move();

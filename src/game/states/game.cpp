@@ -161,6 +161,8 @@ namespace States
     {
         MEMBERS(
             DECL(int INIT=1 ATTR Refl::Optional) level_index
+            DECL(unsigned int INIT=0 ATTR Refl::Optional) initial_sky_pos
+            DECL(bool INIT=false ATTR Refl::Optional) camera_starts_above
         )
 
         SIMPLE_STRUCT( Atlas
@@ -182,11 +184,14 @@ namespace States
         SceneSwitch scene_switch;
 
         ivec2 camera_pos{};
+        ivec2 camera_target_pos{};
 
         std::vector<Lamp> lamps;
         Gate gate;
 
         std::vector<SpikeBlock> spike_blocks;
+
+        float camera_movement_timer = 0; // Ticks towards zero.
 
         [[nodiscard]] static std::string GetLevelFileName(int index)
         {
@@ -197,7 +202,7 @@ namespace States
         {
             texture_atlas.InitRegions(atlas, ".png");
             map = Map(GetLevelFileName(level_index));
-            camera_pos = map.cells.size() * tile_size / 2;
+            camera_pos = camera_target_pos = map.cells.size() * tile_size / 2;
 
             // Player.
             p.pos = ivec2(map.points.GetSinglePoint("player"));
@@ -212,8 +217,7 @@ namespace States
                 new_lamp.pos = ivec2(lamp_pos / tile_size) * tile_size + tile_size/2 + ivec2(0, -7);
             }
 
-            // Spikes.
-            {
+            { // Spikes.
                 map.points.ForEachPointWithNamePrefix("spike", [&](std::string_view suffix, fvec2 pos)
                 {
                     SpikeBlock &new_spike = spike_blocks.emplace_back();
@@ -235,6 +239,20 @@ namespace States
 
                     it->second->push_back(&spike);
                     spike.same_x_spikes = it->second;
+                }
+            }
+
+            { // Parameters.
+                if (initial_sky_pos)
+                {
+                    sky.time = initial_sky_pos;
+                    initial_sky_pos = 0;
+                }
+
+                if (camera_starts_above)
+                {
+                    camera_movement_timer = 1;
+                    camera_starts_above = false;
                 }
             }
         }
@@ -708,9 +726,18 @@ namespace States
             }
 
             { // Camera.
-                Audio::ListenerPosition(fvec2(camera_pos).to_vec3(-listener_dist));
-                Audio::ListenerOrientation(fvec3(0,0,1), fvec3(0,-1,0));
-                Audio::Source::DefaultRefDistance(listener_dist);
+                if (camera_movement_timer > 0)
+                {
+                    clamp_var_min(camera_movement_timer -= 0.005);
+
+                    camera_pos = iround(mix(smoothstep(camera_movement_timer * 0.5) * 2, camera_target_pos, camera_target_pos with(y -= 300)));
+                }
+
+                { // Sound.
+                    Audio::ListenerPosition(fvec2(camera_pos).to_vec3(-listener_dist));
+                    Audio::ListenerOrientation(fvec3(0,0,1), fvec3(0,-1,0));
+                    Audio::Source::DefaultRefDistance(listener_dist);
+                }
             }
         }
 

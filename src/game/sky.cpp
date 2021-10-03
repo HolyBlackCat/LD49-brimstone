@@ -13,7 +13,7 @@ void Sky::Render() const
         bg_tex = texture_atlas.Get("sky_bg.png"),
         clouds_tex = texture_atlas.Get("sky_clouds.png");
 
-    static const std::vector<float> visual_distances = {600, 350, 100};
+    static const std::vector<float> visual_distances = {600, 260, 100};
     constexpr float speed_factor = 100;
 
     r.iquad(ivec2(), bg_tex).center();
@@ -21,7 +21,7 @@ void Sky::Render() const
     int layer_index = 0;
     for (float layer_dist : visual_distances)
     {
-        int offset = mod_ex(int(time / layer_dist * speed_factor), screen_size.x);
+        int offset = mod_ex(iround(time / layer_dist * speed_factor), screen_size.x);
 
         auto layer_region = clouds_tex.region(ivec2(0, screen_size.y / 2 * layer_index), screen_size with(y /= 2));
         r.iquad(-screen_size/2 + ivec2(offset, 0), layer_region);

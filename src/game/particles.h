@@ -144,4 +144,16 @@ class ParticleController
             drag = 0.01,
         ));
     }
+
+    void AddMenuFlame(fvec2 pos, fvec2 vel)
+    {
+        float c = frand <= 0.5;
+        Add(adjust(Particle{},
+            pos = pos, vel = vel,
+            color = fvec3(0, c, 1),
+            end_color = fvec3(c * 0.5, 0.5 + c * 0.5, 1),
+            max_time = 20 <= irand <= 30,
+            drag = 0.01,
+        ));
+    }
 };

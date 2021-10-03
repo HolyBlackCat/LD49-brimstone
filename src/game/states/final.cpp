@@ -59,10 +59,13 @@ namespace States
         {
             fvec3 bg_color = fvec3(25, 13, 43) / 255 * clamp_min(1 - timer / 60.);
 
-            Graphics::SetClearColor(bg_color);
+            Graphics::SetClearColor(fvec3(0));
             Graphics::Clear();
 
             r.BindShader();
+
+            // Background.
+            r.iquad(ivec2(0), screen_size).color(bg_color).center();
 
             // Text outline.
             for (const Label &label : labels)
