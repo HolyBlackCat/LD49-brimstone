@@ -232,14 +232,14 @@ namespace States
             for (fvec2 lamp_pos : map.points.GetPointList("lamp"))
             {
                 Lamp &new_lamp = lamps.emplace_back();
-                new_lamp.pos = ivec2(lamp_pos / tile_size) * tile_size + tile_size/2 + ivec2(0, -7);
+                new_lamp.pos = iround(lamp_pos) + ivec2(0, -7);
             }
 
             { // Spikes.
                 map.points.ForEachPointWithNamePrefix("spike", [&](std::string_view suffix, fvec2 pos)
                 {
                     SpikeBlock &new_spike = spike_blocks.emplace_back();
-                    new_spike.pos = ivec2(pos / tile_size) * tile_size + tile_size/2;
+                    new_spike.pos = iround(pos);
                     if (!suffix.empty())
                         new_spike.height = Refl::FromString<int>(suffix);
                 });
@@ -410,9 +410,8 @@ namespace States
                 { // Spreading corruption.
                     if (p.death_timer == 0)
                     {
-                        for (int point_y : {p.hitbox_a.y-1, p.hitbox_b.y+1})
-                        for (int point_x : {p.hitbox_a.x-1, p.hitbox_b.x+1})
-                            map.CorrputTile(div_ex(p.pos + ivec2(point_x, point_y), tile_size), Cell::num_corruption_stages);
+                        for (ivec2 point : {ivec2(p.hitbox_b.x+1, 0), ivec2(p.hitbox_a.x-1, 0), ivec2(0, p.hitbox_b.y+1), ivec2(0, p.hitbox_a.y-1)})
+                            map.CorrputTile(div_ex(p.pos + point, tile_size), Cell::num_corruption_stages);
                     }
                 }
 
@@ -677,7 +676,7 @@ namespace States
                     gate.finish_timer++;
 
                 { // Player interactions.
-                    if (gate.finish_timer == 0 && gate.ready_timer > gate_anim_delay + gate_anim_len && ((p.pos - gate.pos).abs() <= gate_hitbox_half).all())
+                    if (gate.finish_timer == 0 && gate.ready_timer > gate_anim_delay + gate_anim_len && ((p.pos - gate.pos).abs() <= gate_hitbox_half).all() && p.ground)
                     {
                         gate.finish_timer = 1;
                         Sounds::gate_entered({});
@@ -713,8 +712,10 @@ namespace States
                         scene_switch.QueueSwitchToLevel(level_index + 1);
                 }
 
+                gate.vel.y += gravity;
+
                 { // Update position.
-                    constexpr ivec2 hitpoint_offset(0, 6);
+                    constexpr ivec2 hitpoint_offset(0, 5);
 
                     fvec2 clamped_vel = gate.vel;
                     clamp_var(clamped_vel.y, -p_vel_limit_y_up, p_vel_limit_y_down);
@@ -878,14 +879,27 @@ namespace States
                 r.iquad(ivec2(0), atlas.vignette).center().alpha(0.5);
             }
 
-            { // Tutorial.
+            { // Tutorial and level index.
                 for (int i : {0, 1, 2, 3, -1})
                 {
+                    ivec2 offset = i < 0 ? ivec2(0) : ivec2::dir4(i);
+                    fvec3 color = i < 0 ? fvec3(1) : fvec3(0);
+
+                    { // Level index.
+                        static const std::vector<std::string_view> roman_numbers = {"I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV"};
+                        std::string text;
+                        if (level_index-1 < int(roman_numbers.size()))
+                            text = roman_numbers[level_index-1];
+                        else
+                            text = FMT("{}", level_index);
+
+                        r.itext(ivec2(0,-screen_size.y/2 + 10) + (camera_target_pos - camera_pos) * -1 + offset, Graphics::Text(Fonts::main, text)).color(color);
+                    }
+
+                    // Tutorial.
                     int message_y = tut_messages.size();
                     for (const TutMessage &msg : tut_messages)
                     {
-                        ivec2 offset = i < 0 ? ivec2(0) : ivec2::dir4(i);
-                        fvec3 color = i < 0 ? fvec3(1) : fvec3(0);
                         float alpha = smoothstep(clamp_min(1 - msg.hide_timer/60. * (i < 0 ? 1 : 4)));
                         ivec2 pos = ivec2(0, screen_size.y/2 - message_y * 16) + (camera_target_pos - camera_pos) * 2;
                         r.itext(pos with(x -= 10) + offset, Graphics::Text(Fonts::main, msg.a)).color(color).alpha(alpha).align(ivec2( 1, -1));

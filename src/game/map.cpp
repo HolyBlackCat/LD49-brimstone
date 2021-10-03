@@ -17,6 +17,7 @@ static std::vector<TileInfo> tile_info_vec = []{
         {.tile = Tile::grass     , .solid = false, .kills = false, .corruptable = true , .vis = TileFlavors::HorMergedWithRandom{.index = 3, .rand_count = 3}},
         {.tile = Tile::spike     , .solid = false, .kills = true , .corruptable = true , .vis = TileFlavors::Random{.index = 4, .count = 1}},
         {.tile = Tile::spike_down, .solid = false, .kills = true , .corruptable = true , .vis = TileFlavors::Random{.index = 5, .count = 1}},
+        {.tile = Tile::dirt_alt  , .solid = true , .kills = false, .corruptable = true , .vis = TileFlavors::Random{.index = 6, .count = 4}},
     };
     if (ret.size() != std::size_t(Tile::_count))
         Program::Error("Internal error: The tile info vector size is different from the tile enum size.");
@@ -32,7 +33,7 @@ static std::vector<TileInfo> tile_info_vec = []{
 
 bool TileFlavors::ShouldMergeWith(Tile a, Tile b)
 {
-    if (a == Tile::dirt && b == Tile::wall)
+    if (a == Tile::dirt && (b == Tile::wall || b == Tile::dirt_alt))
         return true;
     if (a == Tile::grass && b != Tile::air && b != Tile::spike && b != Tile::spike_down)
         return true;

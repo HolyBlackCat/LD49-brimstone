@@ -10,8 +10,8 @@
             "request": "launch",
             // The `"terminal": ""` part creates a separate terminal on Windows. We need it to be able to Ctrl+C it to update the checkpoints after placing them.
             // On Linux checkpoints work properly without this trick. And also, on Linux it causes a new terminal to spawn each time you debug, which is bad, so we don't use it.
-            "windows": {"target": "./imp-re.exe", "terminal": ""},
-            "linux": {"target": "./imp-re"},
+            "windows": {"target": "./brimstone.exe", "terminal": ""},
+            "linux": {"target": "./brimstone"},
             "cwd": "${workspaceRoot}/bin",
             "valuesFormatting": "prettyPrinters",
             "internalConsoleOptions": "openOnSessionStart",

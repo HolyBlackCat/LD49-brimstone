@@ -56,6 +56,10 @@ namespace States
 
         SavedProgress saved_progress;
 
+        Graphics::Text title_text;
+        ivec2 title_size{};
+        ivec2 title_pos = ivec2(0,-4);
+
         void Init() override
         {
             { // Load the saved progress.
@@ -64,6 +68,11 @@ namespace States
                     saved_progress = Refl::FromString<SavedProgress>(Stream::Input(SavedProgress::path));
                 }
                 catch (...) {}
+            }
+
+            { // Title.
+                title_text = Graphics::Text(Fonts::main, "BRIMSTONE");
+                title_size = title_text.ComputeStats().size;
             }
 
             { // Menu entries.
@@ -132,6 +141,14 @@ namespace States
                 }
             }
 
+            { // Particle effects for the title.
+                if (!queued_func)
+                {
+                    for (int i = 0; i < 4; i++)
+                        par.AddMapFlame(title_pos + fvec2(frand.abs() <= title_size.x/2, frand.abs() <= title_size.y/2), fvec2::dir(mrand.angle(), frand <= 0.4) with(y -= 0.2));
+                }
+            }
+
             if (fade_out_timer > 60)
                 queued_func(next_state);
         }
@@ -146,9 +163,14 @@ namespace States
             sky.Render();
             par.Render(ivec2(0));
 
-            // Text.
+            float text_alpha = clamp_min(1 - fade_out_timer / 30.);
+
+            // Title.
+            r.itext(title_pos, title_text).color(fvec3(0)).alpha(text_alpha);
+
+            // Buttons.
             for (const Entry &e : entries)
-                r.itext(e.pos, e.text).color(fvec3(1)).alpha(clamp_min(1 - fade_out_timer / 30.));
+                r.itext(e.pos, e.text).color(fvec3(1)).alpha(text_alpha);
 
             { // Vignette.
                 static const Graphics::TextureAtlas::Region vignette = texture_atlas.Get("vignette.png");

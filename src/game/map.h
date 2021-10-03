@@ -13,6 +13,7 @@ enum class Tile
     grass,
     spike,
     spike_down,
+    dirt_alt,
     _count,
 };
 

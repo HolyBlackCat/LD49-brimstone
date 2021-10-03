@@ -150,8 +150,8 @@ class ParticleController
         float c = frand <= 0.5;
         Add(adjust(Particle{},
             pos = pos, vel = vel,
-            color = fvec3(0, c, 1),
-            end_color = fvec3(c * 0.5, 0.5 + c * 0.5, 1),
+            color = fvec3(1, c, 0),
+            end_color = fvec3(1, c + 0.5, 0),
             max_time = 20 <= irand <= 30,
             drag = 0.01,
         ));

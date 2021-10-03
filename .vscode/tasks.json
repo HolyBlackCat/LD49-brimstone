@@ -15,15 +15,15 @@
         {
             "label": "Build & Run",
             "type": "shell",
-            "windows": {"command": "make -j12 && cd bin && PATH= ./imp-re"},
-            "linux": {"command": "make -j12 && cd bin && ./imp-re"},
+            "windows": {"command": "make -j12 && cd bin && PATH= ./brimstone"},
+            "linux": {"command": "make -j12 && cd bin && ./brimstone"},
             "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
         },
         {
             "label": "Run",
             "type": "shell",
-            "windows": {"command": "cd bin && PATH= ./imp-re"},
-            "linux": {"command": "cd bin && ./imp-re"},
+            "windows": {"command": "cd bin && PATH= ./brimstone"},
+            "linux": {"command": "cd bin && ./brimstone"},
             "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
         },
         {

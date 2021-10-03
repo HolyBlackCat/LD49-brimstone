@@ -49,6 +49,18 @@ Random::Scalar<int> irand(random_generator);
 Random::Scalar<float> frand(random_generator);
 Random::Misc<float> mrand(random_generator);
 
+static bool fullscreen =
+#ifdef NDEBUG
+    true;
+#else
+    false;
+#endif
+
+static void ApplyFullscreenMode()
+{
+    window.SetMode(fullscreen ? Interface::borderless_fullscreen : Interface::windowed);
+}
+
 struct ProgramState : Program::DefaultBasicState
 {
     GameUtils::State::Manager<GameState> state_manager;
@@ -97,6 +109,12 @@ struct ProgramState : Program::DefaultBasicState
         audio_controller.Tick();
 
         Audio::CheckErrors();
+
+        if (Input::Button(Input::enter).pressed() && (Input::Button(Input::l_alt).down() || Input::Button(Input::r_alt).down()))
+        {
+            fullscreen = !fullscreen;
+            ApplyFullscreenMode();
+        }
     }
 
     void Render() override
@@ -114,6 +132,7 @@ struct ProgramState : Program::DefaultBasicState
 
     void Init()
     {
+        ApplyFullscreenMode();
         mouse.HideCursor();
 
         // Load audio.
@@ -125,7 +144,7 @@ struct ProgramState : Program::DefaultBasicState
         Graphics::Blending::FuncNormalPre();
 
         state_manager.SetState("Menu{}");
-        // state_manager.SetState("Game{}");
+        // state_manager.SetState("Game{level_index=9}");
     }
 };
 
