@@ -1,144 +1,26 @@
 #include "game/main.h"
 #include "game/map.h"
+#include "game/particles.h"
 #include "game/sky.h"
-
-namespace Sounds
-{
-    #define SOUNDS_LIST(X) \
-        X( player_jumps, 0.3 ) \
-        X( player_lands, 0.3 ) \
-        X( player_dies , 0.3 ) \
-
-    #define SOUND_FUNC(name, rand)                                           \
-        void name( std::optional<fvec2> pos, float vol = 1, float pitch = 0) \
-        {                                                                    \
-            auto src = audio_controller.Add(Audio::File<#name>());           \
-            if (pos)                                                         \
-                src->pos(*pos);                                              \
-            else                                                             \
-                src->relative();                                             \
-            src->volume(vol);                                                \
-            src->pitch(pow(2, pitch + (frand.abs() <= rand)));               \
-            src->play();                                                     \
-        }                                                                    \
-
-    SOUNDS_LIST(SOUND_FUNC)
-    #undef SOUND_FUNC
-}
+#include "game/sounds.h"
 
 struct Controls
 {
-    Input::Button left = Input::left;
-    Input::Button right = Input::right;
-    Input::Button jump = Input::z;
-};
+    std::vector<Input::Button> buttons_left = {Input::left, Input::a};
+    std::vector<Input::Button> buttons_right = {Input::right, Input::d};
+    std::vector<Input::Button> buttons_jump = {Input::z, Input::up, Input::w, Input::space};
+    std::vector<Input::Button> buttons_restart = {Input::r};
 
-struct Particle
-{
-    fvec2 pos{};
-    fvec2 vel{};
-    fvec2 acc{};
-    float drag = 0;
-    int max_time = 0;
-    int time = 0;
-    int tex_index = 0; // If negative, treated as the custom size.
-    fvec3 color;
-    std::optional<fvec3> end_color;
-};
-
-class ParticleController
-{
-    std::vector<Particle> list;
-
-  public:
-    ParticleController() {}
-
-    void Tick()
+    [[nodiscard]] bool ButtonActive(std::vector<Input::Button> Controls::*list, bool (Input::Button::*method)() const) const
     {
-        for (Particle &par : list)
-        {
-            par.time++;
-            par.vel += par.acc;
-            par.vel *= 1 - par.drag;
-            par.pos += par.vel;
-        }
-
-        std::erase_if(list, [](const Particle &par){return par.time >= par.max_time;});
+        return std::any_of((this->*list).begin(), (this->*list).end(), std::mem_fn(method));
     }
 
-    void Render(ivec2 camera_pos) const
-    {
-        static const Graphics::TextureAtlas::Region
-            tex = texture_atlas.Get("particles.png"),
-            tex_custom_size = texture_atlas.Get("particle_large_circle.png");
-
-        constexpr int pixel_size = 8;
-        constexpr int tex_frames = 5;
-
-        for (std::size_t i = list.size(); i-- > 0;)
-        {
-            const Particle &par = list[i];
-
-            bool has_custom_size = par.tex_index < 0;
-            float custom_size = !has_custom_size ? 0 : -par.tex_index * (1 - par.time / float(par.max_time));
-
-            if (((par.pos - camera_pos).abs() > screen_size/2 + (has_custom_size ? custom_size : pixel_size)/2).any())
-                continue; // Not visible.
-
-            int frame = clamp(par.time * tex_frames / par.max_time, 0, tex_frames-1);
-
-            auto quad = r.iquad(iround(par.pos) - camera_pos, !has_custom_size ? tex.region(ivec2(frame, par.tex_index) * pixel_size, ivec2(pixel_size)) : tex_custom_size)
-                .center()
-                .color(!par.end_color ? par.color : mix(par.time / float(par.max_time), par.color, *par.end_color))
-                .mix(0);
-
-            if (has_custom_size)
-                quad.scale(custom_size / tex_custom_size.size.x);
-        }
-    }
-
-    void Add(const Particle &par)
-    {
-        list.push_back(par);
-    }
-
-    void AddPlayerFlame(fvec2 pos, fvec2 vel)
-    {
-        float c = frand <= 0.5;
-        Add(adjust(Particle{},
-            pos = pos, vel = vel,
-            color = fvec3(1, c, 0),
-            end_color = fvec3(1, c + 0.5, 0),
-            max_time = 20 <= irand <= 40,
-            drag = 0.01,
-        ));
-    }
-
-    void AddSmallPlayerFlame(fvec2 pos, fvec2 vel)
-    {
-        int max_time = 40 <= irand <= 60;
-        float c = frand <= 0.5;
-        Add(adjust(Particle{},
-            pos = pos, vel = vel,
-            color = fvec3(1, c, 0),
-            end_color = fvec3(1, c + 0.5, 0),
-            time = max_time / 2,
-            max_time = max_time,
-            drag = 0.01,
-        ));
-    }
-
-    void AddLongLivedPlayerFlame(fvec2 pos, fvec2 vel)
-    {
-        float c = frand <= 0.5;
-        Add(adjust(Particle{},
-            pos = pos, vel = vel,
-            color = fvec3(1, c, 0),
-            end_color = fvec3(1, c + 0.5, 0),
-            max_time = 60 <= irand <= 90,
-            drag = 0.01,
-        ));
-    }
+    [[nodiscard]] bool LeftDown      () const {return ButtonActive(&Controls::buttons_left   , &Input::Button::down   );}
+    [[nodiscard]] bool RightDown     () const {return ButtonActive(&Controls::buttons_right  , &Input::Button::down   );}
+    [[nodiscard]] bool JumpPressed   () const {return ButtonActive(&Controls::buttons_jump   , &Input::Button::pressed);}
+    [[nodiscard]] bool JumpDown      () const {return ButtonActive(&Controls::buttons_jump   , &Input::Button::down   );}
+    [[nodiscard]] bool RestartPressed() const {return ButtonActive(&Controls::buttons_restart, &Input::Button::pressed);}
 };
 
 class SceneSwitch
@@ -183,6 +65,54 @@ class SceneSwitch
     void EnterSceneAnimation()
     {
         timer = 1;
+    }
+};
+
+struct Lamp
+{
+    ivec2 pos{};
+    fvec2 vel{};
+    fvec2 vel_lag{};
+
+    bool lit = false;
+    ivec2 flame_pos{};
+};
+
+struct Gate
+{
+    ivec2 pos{};
+    fvec2 vel{};
+    fvec2 vel_lag{};
+
+    int ready_timer = 0;
+
+    int finish_timer = 0;
+};
+
+struct SpikeBlock
+{
+    ivec2 pos{};
+    float vel = 0;
+    float vel_lag = 0;
+
+    int height = 1;
+
+    bool ground = true, prev_ground = true;
+
+    std::shared_ptr<std::vector<SpikeBlock *>> same_x_spikes;
+
+    [[nodiscard]] bool PixelTouches(ivec2 pixel_pos) const
+    {
+        return (pixel_pos >= pos with(y -= (height-1) * tile_size) - tile_size/2).all() && (pixel_pos < pos + tile_size/2).all();
+    }
+
+    [[nodiscard]] bool SolidAtOffset(const Map &map, ivec2 offset) const
+    {
+        // Only the first point is used for spike-spike collisions.
+        const std::array<ivec2, 2> hitbox_points = {ivec2(0,5), ivec2(0,-8 - (height - 1) * tile_size)}; // Note `-8`, this lets spikes stick to the ceiling.
+
+        return std::any_of(hitbox_points.begin(), hitbox_points.end(), [&](ivec2 point){return map.PixelIsSolid(pos + point + offset);})
+            || std::any_of(same_x_spikes->begin(), same_x_spikes->end(), [&](const SpikeBlock *other){return other != this && other->PixelTouches(pos + hitbox_points.front() + offset);});
     }
 };
 
@@ -235,7 +165,11 @@ namespace States
 
         SIMPLE_STRUCT( Atlas
             DECL(Graphics::TextureAtlas::Region)
-                player
+                player,
+                lamp,
+                gate,
+                spike,
+                vignette
         )
 
         Atlas atlas;
@@ -249,14 +183,60 @@ namespace States
 
         ivec2 camera_pos{};
 
+        std::vector<Lamp> lamps;
+        Gate gate;
+
+        std::vector<SpikeBlock> spike_blocks;
+
+        [[nodiscard]] static std::string GetLevelFileName(int index)
+        {
+            return FMT("assets/maps/{}.json", index);
+        }
 
         void Init() override
         {
             texture_atlas.InitRegions(atlas, ".png");
-            map = Map(FMT("assets/maps/{}.json", level_index));
+            map = Map(GetLevelFileName(level_index));
             camera_pos = map.cells.size() * tile_size / 2;
 
-            p.pos = ivec2(map.points.GetSinglePoint("player") / tile_size) * tile_size + tile_size/2;
+            // Player.
+            p.pos = ivec2(map.points.GetSinglePoint("player"));
+
+            // Gate.
+            gate.pos = ivec2(map.points.GetSinglePoint("gate"));
+
+            // Lamps.
+            for (fvec2 lamp_pos : map.points.GetPointList("lamp"))
+            {
+                Lamp &new_lamp = lamps.emplace_back();
+                new_lamp.pos = ivec2(lamp_pos / tile_size) * tile_size + tile_size/2 + ivec2(0, -7);
+            }
+
+            // Spikes.
+            {
+                map.points.ForEachPointWithNamePrefix("spike", [&](std::string_view suffix, fvec2 pos)
+                {
+                    SpikeBlock &new_spike = spike_blocks.emplace_back();
+                    new_spike.pos = ivec2(pos / tile_size) * tile_size + tile_size/2;
+                    if (!suffix.empty())
+                        new_spike.height = Refl::FromString<int>(suffix);
+                });
+
+                // Sort spike blocks by Y. This ensures consistent fall pattern for stacks of spike blocks.
+                std::sort(spike_blocks.begin(), spike_blocks.end(), [](const SpikeBlock &a, const SpikeBlock &b){return a.pos.y < b.pos.y;}); // Note `<`. This ensures gaps between falling blocks.
+
+                // Group spike blocks by X coord.
+                std::map<int, std::shared_ptr<std::vector<SpikeBlock *>>> spike_map;
+                for (SpikeBlock &spike : spike_blocks)
+                {
+                    auto it = spike_map.find(spike.pos.x);
+                    if (it == spike_map.end())
+                        it = spike_map.try_emplace(spike.pos.x, std::make_shared<std::vector<SpikeBlock *>>()).first;
+
+                    it->second->push_back(&spike);
+                    spike.same_x_spikes = it->second;
+                }
+            }
         }
 
         void Tick(std::string &next_state) override
@@ -278,11 +258,29 @@ namespace States
                 listener_dist = screen_size.x * 2.5;
 
             constexpr int
-                p_death_anim_len = 20;
+                p_death_anim_len = 20,
+                p_spike_hitbox_shrink_x = 2,
+                lamp_hitbox_half_x = 6,
+                lamp_hitbox_half_y_up = 2,
+                lamp_hitbox_half_y_down = 10,
+                gate_anim_delay = 30,
+                gate_anim_len = 90,
+                gate_hitbox_half = 6,
+                gate_finish_anim_len = 120,
+                gate_transition_delay = 60;
+
+            constexpr ivec2
+                gate_center_offset(0,-6);
 
             { // Switch between levels (must be first).
                 if (auto next_level = scene_switch.ShouldSwitchToLevel())
                 {
+                    if (!std::filesystem::exists(GetLevelFileName(*next_level)))
+                    {
+                        next_state = "Final{}";
+                        return;
+                    }
+
                     *this = Game();
                     level_index = *next_level;
                     Init();
@@ -291,9 +289,14 @@ namespace States
             }
 
             sky.Move();
-            map.Tick();
+            map.Tick(par);
             par.Tick();
             scene_switch.Tick();
+
+            { // Restart level using a hotkey.
+                if (con.RestartPressed())
+                    scene_switch.QueueSwitchToLevel(level_index);
+            }
 
             { // Player.
                 p.prev2_vel = p.prev_vel;
@@ -313,8 +316,10 @@ namespace States
                 };
 
                 { // Controls.
+                    bool can_control = p.death_timer == 0 && gate.finish_timer == 0;
+
                     { // Walking.
-                        int hc = p.death_timer > 0 ? 0 : con.right.down() - con.left.down();
+                        int hc = can_control ? con.RightDown() - con.LeftDown() : 0;
 
                         if (hc)
                         {
@@ -334,13 +339,13 @@ namespace States
                     }
 
                     { // Jumping.
-                        if (p.ground && p.death_timer == 0 && con.jump.pressed())
+                        if (p.ground &&can_control && con.JumpPressed())
                         {
                             CreateJumpEffect(false);
                             p.vel.y = -p_jump_speed;
                         }
 
-                        if (!p.ground && p.vel.y < 0 && !con.jump.down())
+                        if (!p.ground && p.vel.y < 0 && !con.JumpDown())
                             p.vel.y += p_extra_gravity_to_stop_jump;
 
                         if (p.ground && !p.prev_ground && p.prev2_vel.y >= p_min_y_vel_for_landing_effect)
@@ -351,28 +356,9 @@ namespace States
                 { // Spreading corruption.
                     if (p.death_timer == 0)
                     {
-                        auto Corrupt = [&](ivec2 pixel_pos)
-                        {
-                            ivec2 tile_pos = div_ex(pixel_pos, tile_size);
-                            if (!map.cells.pos_in_range(tile_pos))
-                                return; // Tile coords out of range.
-
-                            Cell &cell = map.cells.safe_nonthrowing_at(tile_pos);
-                            if (cell.corruption_stage > 0)
-                                return; // Already corrupted.
-
-                            if (!GetTileInfo(cell.tile).corruptable)
-                                return; // Not corruptable.
-
-                            cell.corruption_stage = Cell::num_corruption_stages;
-                            cell.corruption_time = map.Time();
-                        };
-
                         for (int point_y : {p.hitbox_a.y-1, p.hitbox_b.y+1})
                         for (int point_x : {p.hitbox_a.x-1, p.hitbox_b.x+1})
-                            Corrupt(p.pos + ivec2(point_x, point_y));
-
-                        #error Make the corruption spread somehow.
+                            map.CorrputTile(div_ex(p.pos + ivec2(point_x, point_y), tile_size), Cell::num_corruption_stages);
                     }
                 }
 
@@ -381,7 +367,7 @@ namespace States
                 }
 
                 { // Update position.
-                    if (p.death_timer == 0)
+                    if (p.death_timer == 0 && gate.finish_timer == 0)
                     {
                         fvec2 clamped_vel = p.vel;
                         clamp_var(clamped_vel.y, -p_vel_limit_y_up, p_vel_limit_y_down);
@@ -429,21 +415,46 @@ namespace States
                 }
 
                 { // Flame trail.
-                    if (p.death_timer == 0)
+                    if (p.death_timer == 0 && gate.finish_timer == 0)
                         par.AddPlayerFlame(p.pos + fvec2(frand.abs() <= 4, frand.abs() <= 4), p.vel * 0.4 + fvec2(frand.abs() < 0.1, -(0.1 < frand < 1)));
                 }
 
                 { // Death conditions.
-                    { // Falling off from the map.
-                        constexpr int margin = tile_size / 2;
+                    if (p.death_timer == 0 && gate.finish_timer == 0)
+                    {
+                        { // Falling off from the map.
+                            constexpr int margin = tile_size / 2;
 
-                        // Check all borders except the top one.
-                        if ((p.pos >= map.cells.size() * tile_size + margin).any() || p.pos.x < -margin)
-                            p.Kill();
+                            // Check all borders except the top one.
+                            if ((p.pos >= map.cells.size() * tile_size + margin).any() || p.pos.x < -margin)
+                                p.Kill();
+                        }
+
+                        { // Touching a spike tile.
+                            for (int point_y : {p.hitbox_a.y, p.hitbox_b.y})
+                            for (int point_x : {p.hitbox_a.x, p.hitbox_b.x})
+                            {
+                                ivec2 tile_pos = div_ex(p.pos + ivec2(point_x, point_y), tile_size);
+                                if (map.cells.pos_in_range(tile_pos) && GetTileInfo(map.cells.unsafe_at(tile_pos).tile).kills)
+                                    p.Kill();
+                            }
+                        }
+
+                        { // Touching a spike object.
+                            for (const SpikeBlock &spike : spike_blocks)
+                            {
+                                for (int point_y : {p.hitbox_a.y, p.hitbox_b.y})
+                                for (int point_x : {p.hitbox_a.x+p_spike_hitbox_shrink_x, p.hitbox_b.x-p_spike_hitbox_shrink_x})
+                                {
+                                    if (spike.PixelTouches(p.pos + ivec2(point_x, point_y)))
+                                        p.Kill();
+                                }
+                            }
+                        }
                     }
                 }
 
-                { // Death effects
+                { // Death effects.
                     if (p.death_timer)
                         p.death_timer++;
 
@@ -451,12 +462,248 @@ namespace States
                     if (p.death_timer > 0 && p.death_timer <= p_death_anim_len)
                     {
                         for (int i = 0; i < 10; i++)
-                            par.AddLongLivedPlayerFlame(p.pos + fvec2(frand.abs() <= 4, frand.abs() <= 4), fvec2::dir(mrand.angle(), frand <= mix(p.death_timer / float(p_death_anim_len), 2, 1)));
+                            par.AddPlayerDeathFlame(p.pos + fvec2(frand.abs() <= 4, frand.abs() <= 4), fvec2::dir(mrand.angle(), frand <= mix(p.death_timer / float(p_death_anim_len), 3, 0)));
                     }
 
                     // Reload level.
                     if (p.death_timer > 60)
                         scene_switch.QueueSwitchToLevel(level_index);
+                }
+            }
+
+            { // Spike blocks.
+                for (SpikeBlock &spike : spike_blocks)
+                {
+                    spike.prev_ground = spike.ground;
+                    spike.ground = spike.SolidAtOffset(map, ivec2(0, 1));
+
+                    { // Landing sound.
+                        if (spike.ground && !spike.prev_ground)
+                            Sounds::spike_lands(spike.pos);
+                    }
+
+                    spike.vel += gravity;
+
+                    { // Update position.
+                        float clamped_vel = spike.vel;
+                        clamp_var(clamped_vel, -p_vel_limit_y_up, p_vel_limit_y_down);
+
+                        float eff_vel = clamped_vel + spike.vel_lag;
+                        int int_vel = iround(eff_vel);
+                        spike.vel_lag = eff_vel - int_vel;
+
+                        if (abs(spike.vel_lag) > p_vel_lag_decr)
+                            spike.vel_lag -= sign(spike.vel_lag) * p_vel_lag_decr;
+                        else
+                            spike.vel_lag = 0;
+
+                        while (int_vel)
+                        {
+                            int s = sign(int_vel);
+
+                            ivec2 offset{};
+                            offset.y = s;
+
+                            if (!spike.SolidAtOffset(map, offset))
+                            {
+                                spike.pos.y += s;
+                                int_vel -= s;
+                            }
+                            else
+                            {
+                                int_vel = 0;
+                                if (spike.vel * s > 0)
+                                    spike.vel = 0;
+                                if (spike.vel_lag * s > 0)
+                                    spike.vel_lag = 0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            { // Lamps.
+                constexpr float
+                    gate_flame_circle_rad = 5,
+                    gate_flame_circle_speed = 0.01;
+
+                int lamp_index = 0;
+                for (Lamp &lamp : lamps)
+                {
+                    { // Start burning if touching player.
+                        if (!lamp.lit)
+                        {
+                            fvec2 delta = lamp.pos - p.pos;
+                            if (abs(delta.x) <= lamp_hitbox_half_x && delta.y >= -lamp_hitbox_half_y_down && delta.y <= lamp_hitbox_half_y_up)
+                            {
+                                lamp.lit = true;
+                                lamp.flame_pos = lamp.pos;
+                                Sounds::lamp_ignites(lamp.pos);
+
+                                if (std::all_of(lamps.begin(), lamps.end(), std::mem_fn(&Lamp::lit)))
+                                    gate.ready_timer = 1;
+
+                                for (int i = 0; i < 10; i++)
+                                    par.AddBlueFlame(lamp.pos + fvec2(frand.abs() <= 1.5, frand.abs() <= 1.5), fvec2::dir(mrand.angle(), frand <= 0.7) with(y -= 0.3));
+                            }
+                        }
+                    }
+
+                    { // Flame particles.
+                        if (gate.finish_timer == 0 && lamp.lit && map.Time() % 2 == 0)
+                        {
+                            float t = clamp((gate.ready_timer - gate_anim_delay) / float(gate_anim_len));
+
+                            fvec2 target = (gate.pos + gate_center_offset) with(x -= 0.5) + (lamps.size() <= 1 ? fvec2(0) : fvec2::dir(lamp_index / float(lamps.size()) * f_pi * 2 + map.Time() * gate_flame_circle_speed, gate_flame_circle_rad));
+
+                            fvec2 final_pos = mix(smoothstep(t), lamp.flame_pos, target);
+
+                            par.AddSmallBlueFlame(final_pos + fvec2(frand.abs() <= 1.5, frand.abs() <= 1.5) * (1 - t * 0.5), fvec2(frand.abs() <= 0.1, -0.6 <= frand <= 0) * (1 - t * 0.6));
+
+                        }
+                    }
+
+                    lamp.vel.y += gravity;
+
+                    { // Update position.
+                        constexpr ivec2 hitpoint_offset(0, 12);
+
+                        fvec2 clamped_vel = lamp.vel;
+                        clamp_var(clamped_vel.y, -p_vel_limit_y_up, p_vel_limit_y_down);
+
+                        fvec2 eff_vel = clamped_vel + lamp.vel_lag;
+                        ivec2 int_vel = iround(eff_vel);
+                        lamp.vel_lag = eff_vel - int_vel;
+
+                        for (int i : {0, 1})
+                        {
+                            if (abs(lamp.vel_lag[i]) > p_vel_lag_decr)
+                                lamp.vel_lag[i] -= sign(lamp.vel_lag[i]) * p_vel_lag_decr;
+                            else
+                                lamp.vel_lag[i] = 0;
+                        }
+
+                        while (int_vel)
+                        {
+                            for (int i : {0, 1})
+                            {
+                                if (int_vel[i] == 0)
+                                    continue;
+
+                                int s = sign(int_vel[i]);
+
+                                ivec2 offset{};
+                                offset[i] = s;
+
+                                if (!map.PixelIsSolid(lamp.pos + hitpoint_offset + offset))
+                                {
+                                    lamp.pos[i] += s;
+                                    int_vel[i] -= s;
+                                }
+                                else
+                                {
+                                    int_vel[i] = 0;
+                                    if (lamp.vel[i] * s > 0)
+                                        lamp.vel[i] = 0;
+                                    if (lamp.vel_lag[i] * s > 0)
+                                        lamp.vel_lag[i] = 0;
+                                }
+                            }
+                        }
+                    }
+
+                    lamp_index++;
+                }
+            }
+
+            { // Gate.
+                if (gate.ready_timer > 0)
+                    gate.ready_timer++;
+                if (gate.finish_timer > 0)
+                    gate.finish_timer++;
+
+                { // Player interactions.
+                    if (gate.finish_timer == 0 && gate.ready_timer > gate_anim_delay + gate_anim_len && ((p.pos - gate.pos).abs() <= gate_hitbox_half).all())
+                    {
+                        gate.finish_timer = 1;
+                        Sounds::gate_entered({});
+                    }
+                }
+
+                { // Effects.
+                    if (gate.ready_timer == gate_anim_delay)
+                        Sounds::lamp_fire_moves(gate.pos);
+
+                    if (gate.ready_timer == gate_anim_delay + gate_anim_len)
+                    {
+                        Sounds::gate_ignites(gate.pos + gate_center_offset);
+                        for (int i = 0; i < 30; i++)
+                        {
+                            fvec2 dir = fvec2::dir(mrand.angle());
+                            par.AddBlueFlame(gate.pos + gate_center_offset + dir * (frand <= 5), dir * (frand <= 0.3) + fvec2(0, -0.15));
+                        }
+                    }
+
+                    if (gate.finish_timer > 0 && gate.finish_timer < gate_finish_anim_len && gate.finish_timer % 3 == 0)
+                    {
+                        for (int i = 0; i < 5; i++)
+                        {
+                            fvec2 dir = fvec2::dir(mrand.angle()) * clamp_min(1 - gate.finish_timer / gate_finish_anim_len);
+                            par.AddLongLivedBlueFlame(gate.pos + gate_center_offset + dir * (frand <= 8), dir * (frand <= 0.3));
+                        }
+                    }
+                }
+
+                { // Level transition.
+                    if (gate.finish_timer == gate_transition_delay)
+                        scene_switch.QueueSwitchToLevel(level_index + 1);
+                }
+
+                { // Update position.
+                    constexpr ivec2 hitpoint_offset(0, 6);
+
+                    fvec2 clamped_vel = gate.vel;
+                    clamp_var(clamped_vel.y, -p_vel_limit_y_up, p_vel_limit_y_down);
+
+                    fvec2 eff_vel = clamped_vel + gate.vel_lag;
+                    ivec2 int_vel = iround(eff_vel);
+                    gate.vel_lag = eff_vel - int_vel;
+
+                    for (int i : {0, 1})
+                    {
+                        if (abs(gate.vel_lag[i]) > p_vel_lag_decr)
+                            gate.vel_lag[i] -= sign(gate.vel_lag[i]) * p_vel_lag_decr;
+                        else
+                            gate.vel_lag[i] = 0;
+                    }
+
+                    while (int_vel)
+                    {
+                        for (int i : {0, 1})
+                        {
+                            if (int_vel[i] == 0)
+                                continue;
+
+                            int s = sign(int_vel[i]);
+
+                            ivec2 offset{};
+                            offset[i] = s;
+
+                            if (!map.PixelIsSolid(gate.pos + hitpoint_offset + offset))
+                            {
+                                gate.pos[i] += s;
+                                int_vel[i] -= s;
+                            }
+                            else
+                            {
+                                int_vel[i] = 0;
+                                if (gate.vel[i] * s > 0)
+                                    gate.vel[i] = 0;
+                                if (gate.vel_lag[i] * s > 0)
+                                    gate.vel_lag[i] = 0;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -469,7 +716,12 @@ namespace States
 
         void Render() const override
         {
-            constexpr int player_tex_size = 12;
+            constexpr int
+                player_tex_size = 12;
+
+            constexpr float
+                outline_alpha = 0.3;
+
 
             Graphics::SetClearColor(fvec3(0));
             Graphics::Clear();
@@ -477,7 +729,7 @@ namespace States
 
             sky.Render();
 
-            { // Render the map.
+            { // Map.
                 r.Finish();
 
                 // Render the map itself to a separate texture.
@@ -491,19 +743,32 @@ namespace States
                 r.Finish();
                 Graphics::Blending::FuncNormalPre();
 
+                { // Objects that should have outline.
+                    { // Lamps.
+                        for (const Lamp &lamp : lamps)
+                        {
+                            r.iquad(lamp.pos - camera_pos, atlas.lamp).center();
+                        }
+                    }
+
+                    { // Gate.
+                        r.iquad(gate.pos with(y -= 6) - camera_pos, atlas.gate).center();
+                    }
+                }
+                r.Finish();
+
                 // Render that texture to the main framebuffer, with outline.
                 adaptive_viewport.GetFrameBuffer().Bind();
                 r.SetTexture(framebuffer_texture_map);
                 for (int i = 0; i < 4; i++)
-                    r.iquad(ivec2::dir4(i), screen_size).tex(ivec2(0)).color(fvec3(0)).mix(0).center().flip_y().alpha(0.3);
+                    r.iquad(ivec2::dir4(i), screen_size).tex(ivec2(0)).color(fvec3(0)).mix(0).center().flip_y().alpha(outline_alpha);
                 r.iquad(ivec2(0), screen_size).tex(ivec2(0)).center().flip_y();
                 r.Finish();
 
                 r.SetTexture(texture_main);
             }
 
-
-            float p_alpha = clamp_min(1 - p.death_timer / 15.);
+            float p_alpha = clamp_min(1 - p.death_timer / 15. - gate.finish_timer / 15);
 
             { // Player (before particles).
                 int frame = p.walk_timer == 0 ? 0 : p.walk_timer / 5 % 2 + 1;
@@ -516,6 +781,19 @@ namespace States
                 r.iquad(p.pos - camera_pos + ivec2(p.left ? -1 : 0, 0), atlas.player.region(ivec2(player_tex_size, 0), ivec2(player_tex_size))).center().alpha(p_alpha);
             }
 
+            { // Spike blocks.
+                for (const SpikeBlock &spike : spike_blocks)
+                {
+                    for (int i = 0; i < spike.height; i++)
+                        r.iquad(spike.pos with(y -= i * tile_size) - camera_pos, atlas.spike.region(ivec2(0, tile_size * (spike.height <= 1 ? 0 : i == 0 ? 3 : i == spike.height-1 ? 1 : 2)), ivec2(tile_size))).center();
+                }
+            }
+
+            { // Vignette.
+                r.iquad(ivec2(0), atlas.vignette).center().alpha(0.5);
+            }
+
+            // Scene transition.
             scene_switch.Render();
 
             r.Finish();

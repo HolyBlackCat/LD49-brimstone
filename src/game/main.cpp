@@ -15,7 +15,7 @@ namespace Fonts
 {
     namespace Files
     {
-        Graphics::FontFile main("assets/Monocat_6x12.ttf", 12);
+        Graphics::FontFile main("assets/CatIV15.ttf", 15);
     }
 
     Graphics::Font main;
@@ -29,7 +29,7 @@ Graphics::TextureAtlas texture_atlas = []{
     glyph_ranges.Add(Unicode::Ranges::Basic_Latin);
 
     Graphics::MakeFontAtlas(ret.GetImage(), font_region.pos, font_region.size, {
-        {Fonts::main, Fonts::Files::main, glyph_ranges, Graphics::FontFile::monochrome_with_hinting},
+        {Fonts::main, Fonts::Files::main, glyph_ranges, Graphics::FontFile::hinting_mode_light},
     });
     return ret;
 }();
@@ -118,13 +118,6 @@ struct ProgramState : Program::DefaultBasicState
         Audio::LoadMentionedFiles(Audio::LoadFromPrefixWithExt("assets/audio/"), Audio::mono, Audio::wav);
 
         ImGui::StyleColorsDark();
-
-        // Load various small fonts
-        auto monochrome_font_flags = ImGuiFreeTypeBuilderFlags_Monochrome | ImGuiFreeTypeBuilderFlags_MonoHinting;
-
-        gui_controller.LoadFont("assets/Monocat_6x12.ttf", 12.0f, adjust(ImFontConfig{}, FontBuilderFlags = monochrome_font_flags));
-        gui_controller.LoadDefaultFont();
-        gui_controller.RenderFontsWithFreetype();
 
         Graphics::Blending::Enable();
         Graphics::Blending::FuncNormalPre();
