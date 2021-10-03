@@ -1,5 +1,6 @@
 #include "game/main.h"
 #include "game/particles.h"
+#include "game/sounds.h"
 
 namespace States
 {
@@ -32,8 +33,9 @@ namespace States
         void Init() override
         {
             labels.emplace_back(ivec2(0, -32), Graphics::Text(Fonts::main, "The end"));
-
             labels.emplace_back(ivec2(0, 0), Graphics::Text(Fonts::main, "Thanks for playing!"));
+
+            Sounds::ThemeSource().stop();
         }
 
         void Tick(std::string &next_state) override

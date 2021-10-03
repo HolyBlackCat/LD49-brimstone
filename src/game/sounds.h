@@ -32,4 +32,16 @@ namespace Sounds
 
     SOUNDS_LIST(SOUND_FUNC)
     #undef SOUND_FUNC
+
+    inline Audio::Source &ThemeSource()
+    {
+        static Audio::Source ret = []{
+            Audio::Source ret(Audio::File<"exile", Audio::stereo, Audio::ogg>());
+            ret.relative();
+            ret.volume(0.7);
+            ret.loop();
+            return ret;
+        }();
+        return ret;
+    }
 }

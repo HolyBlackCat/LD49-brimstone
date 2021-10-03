@@ -11,6 +11,7 @@ struct Controls
     std::vector<Input::Button> buttons_right = {Input::right, Input::d};
     std::vector<Input::Button> buttons_jump = {Input::z, Input::up, Input::w, Input::space};
     std::vector<Input::Button> buttons_restart = {Input::r};
+    std::vector<Input::Button> buttons_mute = {Input::m};
 
     [[nodiscard]] bool ButtonActive(std::vector<Input::Button> Controls::*list, bool (Input::Button::*method)() const) const
     {
@@ -22,6 +23,7 @@ struct Controls
     [[nodiscard]] bool JumpPressed   () const {return ButtonActive(&Controls::buttons_jump   , &Input::Button::pressed);}
     [[nodiscard]] bool JumpDown      () const {return ButtonActive(&Controls::buttons_jump   , &Input::Button::down   );}
     [[nodiscard]] bool RestartPressed() const {return ButtonActive(&Controls::buttons_restart, &Input::Button::pressed);}
+    [[nodiscard]] bool MutePressed   () const {return ButtonActive(&Controls::buttons_mute   , &Input::Button::pressed);}
 };
 
 class SceneSwitch
@@ -207,8 +209,15 @@ namespace States
             return FMT("assets/maps/{}.json", index);
         }
 
+        inline static bool mute_theme = false;
+
         void Init() override
         {
+            [[maybe_unused]] static const std::nullptr_t once = []{
+                Sounds::ThemeSource().play();
+                return nullptr;
+            }();
+
             texture_atlas.InitRegions(atlas, ".png");
             map = Map(GetLevelFileName(level_index));
             camera_pos = camera_target_pos = map.cells.size() * tile_size / 2;
@@ -257,6 +266,7 @@ namespace States
                     tut_messages.push_back({.a = "Arrows/WASD", .b = "move",                      .should_hide = [&]{return con.LeftDown() || con.RightDown();}});
                     tut_messages.push_back({.a = "Z/Space/Up", .b = "jump (hold to jump higher)", .should_hide = [&]{return con.JumpDown() && p.vel.y > 0;}});
                     tut_messages.push_back({.a = "R", .b = "restart level",                       .should_hide = [&]{return con.RestartPressed();}});
+                    tut_messages.push_back({.a = "M", .b = "mute music",                          .should_hide = [&]{return con.MutePressed();}});
                 }
             }
 
@@ -774,6 +784,17 @@ namespace States
 
                     if (msg.hide_timer == 0 && msg.should_hide())
                         msg.hide_timer = 1;
+                }
+            }
+
+            { // Mute theme.
+                if (con.MutePressed())
+                {
+                    mute_theme = !mute_theme;
+                    if (mute_theme)
+                        Sounds::ThemeSource().pause();
+                    else
+                        Sounds::ThemeSource().play();
                 }
             }
         }
