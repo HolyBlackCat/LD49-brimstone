@@ -12,7 +12,6 @@ LINKER_MODE := CXX
 LIBRARY_PACK_NAME := imp-re_deps_21-08-1
 USED_PACKAGES := sdl2 openal freetype2 ogg vorbis vorbisfile zlib fmt double-conversion bullet
 
-
 # Flags
 # `-Wno-gnu-zero-variadic-macro-arguments` - Allow omitting the last `,` when passing zero args to a variadic macro parameter.
 #     The standard allows this since C++20, but Clang's `-pedantic-errors` incorrectly rejects it otherwise.
@@ -51,6 +50,12 @@ $(mode_flags) LDFLAGS += -fsanitize=address
 $(call new_mode,sanitize_ub)
 $(mode_flags) CXXFLAGS += -g -D_GLIBCXX_DEBUG -fsanitize=undefined
 $(mode_flags) LDFLAGS += -fsanitize=undefined
+
+# Icon.
+$(OBJECT_DIR)/release/src/icon.rc.o: bin/assets/_icon.ico
+bin/assets/_icon.ico: $(wildcard bin/assets/_sources/icon/*.png)
+	convert $^ $@
+
 
 # File-specific flags
 FILE_SPECIFIC_FLAGS := lib/implementation.cpp lib/cglfl.cpp > -g0 -O3

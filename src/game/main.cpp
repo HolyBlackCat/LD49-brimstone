@@ -1,6 +1,6 @@
 #include "main.h"
 
-const std::string_view window_name = "LD49";
+const std::string_view window_name = "BRIMSTONE";
 
 Interface::Window window(std::string(window_name), screen_size * 2, Interface::windowed, adjust_(Interface::WindowSettings{}, min_size = screen_size));
 static Graphics::DummyVertexArray dummy_vao = nullptr;
@@ -9,7 +9,7 @@ static Audio::Context audio_context = nullptr;
 Audio::SourceManager audio_controller;
 
 const Graphics::ShaderConfig shader_config = Graphics::ShaderConfig::Core();
-Interface::ImGuiController gui_controller(Poly::derived<Interface::ImGuiController::GraphicsBackend_Modern>, adjust_(Interface::ImGuiController::Config{}, shader_header = shader_config.common_header));
+Interface::ImGuiController gui_controller(Poly::derived<Interface::ImGuiController::GraphicsBackend_Modern>, adjust_(Interface::ImGuiController::Config{}, shader_header = shader_config.common_header, store_state_in_file = ""));
 
 namespace Fonts
 {
@@ -22,7 +22,7 @@ namespace Fonts
 }
 
 Graphics::TextureAtlas texture_atlas = []{
-    Graphics::TextureAtlas ret(ivec2(2048), "assets/_images", "assets/atlas.png", "assets/atlas.refl", {{"/font_storage", ivec2(256)}});
+    Graphics::TextureAtlas ret(ivec2(2048), std::filesystem::exists("assets/_images") ? "assets/_images" : "", "assets/atlas.png", "assets/atlas.refl", {{"/font_storage", ivec2(256)}});
     auto font_region = ret.Get("/font_storage");
 
     Unicode::CharSet glyph_ranges;
@@ -88,7 +88,9 @@ struct ProgramState : Program::DefaultBasicState
     void EndFrame() override
     {
         fps_counter.Update();
+        #ifndef NDEBUG
         window.SetTitle(STR((window_name), " TPS:", (fps_counter.Tps()), " FPS:", (fps_counter.Fps()), " AUDIO:", (audio_controller.ActiveSources())));
+        #endif
 
         if (!state_manager)
             Program::Exit();

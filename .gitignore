@@ -15,3 +15,5 @@ compile_commands.json
 .cache/**
 
 bin/progress.txt
+win_bin
+win_obj
